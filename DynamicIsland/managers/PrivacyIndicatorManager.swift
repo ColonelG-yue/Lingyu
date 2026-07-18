@@ -100,8 +100,12 @@ class PrivacyIndicatorManager: ObservableObject {
     /// Current indicator layout based on active states
     var indicatorLayout: IndicatorLayout {
         // Respect user settings
-        let camera = cameraActive && Defaults[.enableCameraDetection]
-        let mic = microphoneActive && Defaults[.enableMicrophoneDetection]
+        // Read the primitive values directly during layout calculation. Defaults can
+        // publish a change while a key is still registering its default value; asking
+        // Defaults for that same key from the notification callback can re-enter its
+        // one-time initializer and terminate the app with SIGTRAP during launch.
+        let camera = cameraActive && cameraDetectionEnabled
+        let mic = microphoneActive && microphoneDetectionEnabled
         let recording = screenRecordingActive
         
         // 8 possible combinations
@@ -127,9 +131,17 @@ class PrivacyIndicatorManager: ObservableObject {
     
     /// Check if any indicator is active (respecting user settings)
     var hasAnyIndicator: Bool {
-        let showCamera = cameraActive && Defaults[.enableCameraDetection]
-        let showMic = microphoneActive && Defaults[.enableMicrophoneDetection]
+        let showCamera = cameraActive && cameraDetectionEnabled
+        let showMic = microphoneActive && microphoneDetectionEnabled
         return showCamera || showMic || screenRecordingActive
+    }
+
+    private var cameraDetectionEnabled: Bool {
+        UserDefaults.standard.object(forKey: "enableCameraDetection") as? Bool ?? true
+    }
+
+    private var microphoneDetectionEnabled: Bool {
+        UserDefaults.standard.object(forKey: "enableMicrophoneDetection") as? Bool ?? true
     }
     
     // MARK: - Initialization
@@ -273,5 +285,4 @@ extension PrivacyIndicatorManager {
         return screenRecordingManager
     }
 }
-
 

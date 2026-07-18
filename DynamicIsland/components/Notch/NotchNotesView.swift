@@ -105,6 +105,12 @@ struct NotchNotesView: View {
         .onAppear {
             updateLayoutState()
             syncWithAppleNotes()
+            handleRequestedNoteCreation()
+        }
+        .onChange(of: coordinator.shouldCreateNewNote) { _, requested in
+            if requested {
+                handleRequestedNoteCreation()
+            }
         }
         .onChange(of: enableAppleNotesSync) { _, isEnabled in
             if isEnabled {
@@ -144,6 +150,12 @@ struct NotchNotesView: View {
     }
     
     // MARK: - Actions
+
+    private func handleRequestedNoteCreation() {
+        guard coordinator.shouldCreateNewNote else { return }
+        coordinator.shouldCreateNewNote = false
+        createNote()
+    }
     
     private func handlePaste() {
         let pasteboard = NSPasteboard.general
@@ -610,6 +622,12 @@ struct NotchClipboardItemRow: View {
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor).opacity(isHovered ? 0.3 : 0.15))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onDrag {
+            ClipboardManager.shared.dragItemProvider(for: item)
+        }
+        .help(item.type == .image
+              ? "单击复制图片；拖动可上传到聊天或其他应用"
+              : "单击复制；拖动可放入其他应用")
     }
     
     private func timeAgoString(from date: Date) -> String {

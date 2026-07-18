@@ -1,7 +1,11 @@
-Atoll (DynamicIsland) - NOTICE
+Lingyu - NOTICE
+
+Lingyu is a modified work based on the Atoll (DynamicIsland) project.
+The original Atoll project is available at:
+https://github.com/Ebullioscopic/Atoll
 
 This product includes software derived from the boring.notch project,
-modified and adapted for Atoll (DynamicIsland). The boring.notch project
+modified and adapted through Atoll (DynamicIsland). The boring.notch project
 is licensed under the GNU General Public License v3.0.
 
 See the LICENSE file for the full GPL v3 text.

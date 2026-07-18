@@ -320,15 +320,21 @@ struct NotchStatsView: View {
                         .font(.system(size: 40))
                         .foregroundColor(.secondary)
                     
-                    Text("Stats Disabled")
+                    Text("系统监控尚未启用")
                         .font(.headline)
                         .foregroundColor(.primary)
                     
-                    Text("Enable stats monitoring in Settings to view system performance data.")
+                    Text("启用后可查看 CPU、内存、GPU、网络和磁盘状态。")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+
+                    Button("一键启用") {
+                        enableStatsFeature = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding()
@@ -354,6 +360,9 @@ struct NotchStatsView: View {
             } else {
                 VStack(spacing: 8) {
                     statsGridLayout
+                    if availableGraphs.count <= 3 {
+                        statsInfoRow
+                    }
                 }
                 .padding(12)
                 .animation(.easeInOut(duration: 0.4), value: availableGraphs.count)
@@ -364,6 +373,13 @@ struct NotchStatsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if enableStatsFeature {
+                statsToolbar
+                    .padding(.top, 8)
+                    .padding(.trailing, 12)
+            }
+        }
         .onAppear {
             // Note: Smart monitoring will handle starting/stopping based on notch state and current view
         }
@@ -404,6 +420,55 @@ struct NotchStatsView: View {
             updateStatsPopoverState()
         }
     }
+
+    private var statsToolbar: some View {
+        HStack(spacing: 7) {
+            Menu {
+                Toggle(isOn: $showCpuGraph) {
+                    Label("CPU", systemImage: "cpu")
+                }
+                Toggle(isOn: $showMemoryGraph) {
+                    Label("内存", systemImage: "memorychip")
+                }
+                Toggle(isOn: $showGpuGraph) {
+                    Label("GPU", systemImage: "display")
+                }
+                Toggle(isOn: $showNetworkGraph) {
+                    Label("网络", systemImage: "network")
+                }
+                Toggle(isOn: $showDiskGraph) {
+                    Label("磁盘", systemImage: "internaldrive")
+                }
+
+                Divider()
+
+                Button("恢复默认布局") {
+                    withAnimation(.smooth) {
+                        showCpuGraph = true
+                        showMemoryGraph = true
+                        showGpuGraph = true
+                        showNetworkGraph = false
+                        showDiskGraph = false
+                    }
+                }
+            } label: {
+                toolbarIcon("slider.horizontal.3")
+            }
+            .menuStyle(.borderlessButton)
+            .help("选择显示的系统指标")
+
+        }
+    }
+
+    private func toolbarIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.82))
+            .frame(width: 30, height: 30)
+            .background(.black.opacity(0.65), in: Circle())
+            .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+    }
+
     private func updateStatsPopoverState() {
         let anyPopoverOpen = showingCPUPopover || showingMemoryPopover || showingGPUPopover || showingNetworkPopover || showingDiskPopover
         let newState = anyPopoverOpen
@@ -418,6 +483,101 @@ struct NotchStatsView: View {
             print("   Disk open=\(showingDiskPopover)")
             #endif
         }
+    }
+
+    private var statsInfoRow: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(systemLoadStatus.color)
+                        .frame(width: 8, height: 8)
+                    Text(systemLoadStatus.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                    Image(systemName: "waveform.path.ecg")
+                        .foregroundStyle(systemLoadStatus.color)
+                }
+                Text("每秒刷新 · 点击上方图表查看进程排行")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+
+            optionalGraphButton(
+                title: "网络",
+                subtitle: showNetworkGraph ? "下载与上传" : "点击开启",
+                icon: "network",
+                color: .orange,
+                isEnabled: showNetworkGraph
+            ) {
+                withAnimation(.smooth) { showNetworkGraph.toggle() }
+            }
+
+            optionalGraphButton(
+                title: "磁盘",
+                subtitle: showDiskGraph ? "读取与写入" : "点击开启",
+                icon: "internaldrive",
+                color: .cyan,
+                isEnabled: showDiskGraph
+            ) {
+                withAnimation(.smooth) { showDiskGraph.toggle() }
+            }
+        }
+    }
+
+    private func optionalGraphButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                Spacer(minLength: 0)
+                Image(systemName: isEnabled ? "checkmark.circle.fill" : "plus.circle")
+                    .foregroundStyle(isEnabled ? color : .white.opacity(0.35))
+            }
+            .padding(10)
+            .frame(width: 175, height: 70)
+            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var systemLoadStatus: (title: String, color: Color) {
+        let values = [
+            percentage(from: statsManager.cpuUsageString),
+            percentage(from: statsManager.memoryUsageString),
+            percentage(from: statsManager.gpuUsageString)
+        ]
+        let peak = values.max() ?? 0
+        if peak >= 90 { return ("系统负载较高", .red) }
+        if peak >= 75 { return ("系统负载偏高", .orange) }
+        return ("系统运行平稳", .green)
+    }
+
+    private func percentage(from value: String) -> Double {
+        let number = value.filter { $0.isNumber || $0 == "." }
+        return Double(number) ?? 0
     }
 }
 

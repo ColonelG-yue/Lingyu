@@ -24,6 +24,7 @@ import AtollExtensionKit
 import SwiftUI
 import Defaults
 import AppKit
+import UniformTypeIdentifiers
 
 struct TabModel: Identifiable {
     let id: String
@@ -44,13 +45,14 @@ struct TabModel: Identifiable {
 }
 
 struct TabSelectionView: View {
+    @EnvironmentObject private var vm: DynamicIslandViewModel
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
     @ObservedObject private var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
+    @ObservedObject private var musicManager = MusicManager.shared
     @StateObject private var quickShareService = QuickShareService.shared
     @Default(.quickShareProvider) private var quickShareProvider
     @State private var showQuickSharePopover = false
     @Default(.enableTimerFeature) var enableTimerFeature
-    @Default(.enableStatsFeature) var enableStatsFeature
     @Default(.enableColorPickerFeature) var enableColorPickerFeature
     @Default(.timerDisplayMode) var timerDisplayMode
     @Default(.enableThirdPartyExtensions) private var enableThirdPartyExtensions
@@ -59,38 +61,45 @@ struct TabSelectionView: View {
     @Default(.showCalendar) private var showCalendar
     @Default(.showMirror) private var showMirror
     @Default(.showStandardMediaControls) private var showStandardMediaControls
+    @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
     @Default(.enableMinimalisticUI) private var enableMinimalisticUI
+    @AppStorage("lingyu.topTabOrder.v1") private var storedTabOrder = ""
+    @State private var isReordering = false
+    @State private var draggedTabID: String?
+    @State private var tabStripSuppressionToken = UUID()
     @Namespace var animation
     
-    private var tabs: [TabModel] {
+    private var availableTabs: [TabModel] {
         var tabsArray: [TabModel] = []
 
         if homeTabVisible {
             tabsArray.append(TabModel(label: "Home", icon: "house.fill", view: .home))
         }
 
+        if !enableMinimalisticUI {
+            tabsArray.append(TabModel(label: "快捷", icon: "slider.horizontal.3", view: .productivity))
+            if Defaults[.enableClipboardManager] {
+                tabsArray.append(TabModel(label: "剪贴板", icon: "doc.on.clipboard", view: .clipboard))
+            }
+            if mediaTabVisible {
+                tabsArray.append(TabModel(label: "媒体", icon: "play.circle.fill", view: .media))
+            }
+            tabsArray.append(TabModel(label: "APP", icon: "app.fill", view: .appFinder))
+            tabsArray.append(TabModel(label: "Codex", icon: "sparkles", view: .llmUsage))
+            // Keep the Pomodoro/timer page discoverable. When disabled, its
+            // embedded empty state offers one-click enablement instead of making
+            // the feature appear to have vanished.
+            tabsArray.append(TabModel(label: "番茄钟", icon: "timer", view: .timer))
+        }
+
+        tabsArray.append(TabModel(label: "系统", icon: "chart.xyaxis.line", view: .stats))
+
         if Defaults[.dynamicShelf] {
             tabsArray.append(TabModel(label: "Shelf", icon: "tray.fill", view: .shelf))
         }
-        
-        if enableTimerFeature && timerDisplayMode == .tab {
-            tabsArray.append(TabModel(label: "Timer", icon: "timer", view: .timer))
-        }
 
-        // Stats tab only shown when stats feature is enabled
-        if Defaults[.enableStatsFeature] {
-            tabsArray.append(TabModel(label: "Stats", icon: "chart.xyaxis.line", view: .stats))
-        }
-
-        // Usage tab only shown when LLM usage feature is enabled
-        if Defaults[.enableLLMUsageFeature] {
-            tabsArray.append(TabModel(label: "Usage", icon: "chart.bar.doc.horizontal", view: .llmUsage))
-        }
-
-        if Defaults[.enableNotes] || (Defaults[.enableClipboardManager] && Defaults[.clipboardDisplayMode] == .separateTab) {
-            let label = Defaults[.enableNotes] ? "Notes" : "Clipboard"
-            let icon = Defaults[.enableNotes] ? "note.text" : "doc.on.clipboard"
-            tabsArray.append(TabModel(label: label, icon: icon, view: .notes))
+        if Defaults[.enableNotes] {
+            tabsArray.append(TabModel(label: "Notes", icon: "note.text", view: .notes))
         }
         if Defaults[.enableTerminalFeature] {
             tabsArray.append(TabModel(label: "Terminal", icon: "apple.terminal", view: .terminal))
@@ -113,42 +122,172 @@ struct TabSelectionView: View {
         }
         return tabsArray
     }
+
+    private var tabs: [TabModel] {
+        let savedOrder = decodedStoredOrder
+        guard !savedOrder.isEmpty else { return availableTabs }
+
+        let positions = Dictionary(uniqueKeysWithValues: savedOrder.enumerated().map { ($0.element, $0.offset) })
+        return availableTabs.enumerated().sorted { lhs, rhs in
+            let left = positions[lhs.element.id] ?? (savedOrder.count + lhs.offset)
+            let right = positions[rhs.element.id] ?? (savedOrder.count + rhs.offset)
+            return left < right
+        }.map(\.element)
+    }
     var body: some View {
-        HStack(spacing: 24) {
-            ForEach(Array(tabs.enumerated()), id: \.element.id) { idx, tab in
-                let isSelected = isSelected(tab)
-                let activeAccent = tab.accentColor ?? .white
-
-                // Render the tab button
-                TabButton(label: tab.label, icon: tab.icon, selected: isSelected) {
-                    if tab.view == .extensionExperience {
-                        coordinator.selectedExtensionExperienceID = tab.experienceID
-                    }
-                    coordinator.currentView = tab.view
-                }
-                .frame(height: 26)
-                .foregroundStyle(isSelected ? activeAccent : .gray)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill((tab.accentColor ?? Color(nsColor: .secondarySystemFill)).opacity(0.25))
-                            .shadow(color: (tab.accentColor ?? .clear).opacity(0.4), radius: 8)
-                            .matchedGeometryEffect(id: "capsule", in: animation)
-                    } else {
-                        Capsule()
-                            .fill(Color.clear)
-                            .matchedGeometryEffect(id: "capsule", in: animation)
-                            .hidden()
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(tabs) { tab in
+                        tabItem(tab)
+                            .id(tab.id)
+                            .onDrop(
+                                of: [UTType.plainText],
+                                delegate: TabReorderDropDelegate(
+                                    targetID: tab.id,
+                                    draggedID: $draggedTabID,
+                                    isEnabled: isReordering,
+                                    move: moveTab,
+                                    finish: finishReordering
+                                )
+                            )
                     }
                 }
-
-                
+                .padding(.horizontal, 2)
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(Capsule())
+            .onChange(of: coordinator.currentView) { _, _ in
+                scrollSelectedTabIntoView(using: proxy, animated: true)
+            }
+            .onAppear {
+                scrollSelectedTabIntoView(using: proxy, animated: false)
             }
         }
         .animation(.smooth(duration: 0.3), value: coordinator.currentView)
-        .clipShape(Capsule())
+        .animation(.smooth(duration: 0.2), value: isReordering)
+        .onHover { hovering in
+            coordinator.isTabStripInteractionActive = hovering
+            vm.setScrollGestureSuppression(hovering, token: tabStripSuppressionToken)
+        }
         .onAppear {
             ensureValidSelection(with: tabs)
+            coordinator.updateAvailableTabViews(tabs.map(\.view))
+        }
+        .onChange(of: tabs.map(\.id)) { _, _ in
+            ensureValidSelection(with: tabs)
+            coordinator.updateAvailableTabViews(tabs.map(\.view))
+        }
+        .onDisappear {
+            coordinator.isTabStripInteractionActive = false
+            vm.setScrollGestureSuppression(false, token: tabStripSuppressionToken)
+        }
+    }
+
+    @ViewBuilder
+    private func tabItem(_ tab: TabModel) -> some View {
+        let selected = isSelected(tab)
+        let activeAccent = tab.accentColor ?? .white
+
+        let button = TabButton(label: tab.label, icon: tab.icon, selected: selected) {
+            if isReordering {
+                finishReordering()
+                return
+            }
+            if tab.view == .extensionExperience {
+                coordinator.selectedExtensionExperienceID = tab.experienceID
+            }
+            coordinator.noteLiveActivityInteraction(for: tab.view)
+            coordinator.currentView = tab.view
+        }
+        .frame(width: 36, height: 34)
+        .foregroundStyle(selected ? activeAccent : .gray)
+        .scaleEffect(isReordering ? 0.94 : 1)
+        .overlay(alignment: .topTrailing) {
+            if isReordering {
+                Circle()
+                    .fill(.orange)
+                    .frame(width: 6, height: 6)
+                    .offset(x: 1, y: -1)
+            }
+        }
+        .background {
+            if selected {
+                Capsule()
+                    .fill((tab.accentColor ?? Color(nsColor: .secondarySystemFill)).opacity(0.25))
+                    .shadow(color: (tab.accentColor ?? .clear).opacity(0.4), radius: 8)
+                    .matchedGeometryEffect(id: "capsule", in: animation)
+            } else {
+                Capsule()
+                    .fill(Color.clear)
+                    .matchedGeometryEffect(id: "capsule", in: animation)
+                    .hidden()
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.45) {
+            guard !isReordering else { return }
+            isReordering = true
+            if Defaults[.enableHaptics] {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
+        }
+
+        if isReordering {
+            button.onDrag {
+                draggedTabID = tab.id
+                return NSItemProvider(object: tab.id as NSString)
+            }
+        } else {
+            button
+        }
+    }
+
+    private var decodedStoredOrder: [String] {
+        guard let data = storedTabOrder.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return ids
+    }
+
+    private func moveTab(_ draggedID: String, _ targetID: String) {
+        guard draggedID != targetID else { return }
+        var ids = tabs.map(\.id)
+        guard let source = ids.firstIndex(of: draggedID),
+              let destination = ids.firstIndex(of: targetID) else { return }
+
+        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.92)) {
+            ids.move(
+                fromOffsets: IndexSet(integer: source),
+                toOffset: destination > source ? destination + 1 : destination
+            )
+            persistTabOrder(ids)
+        }
+    }
+
+    private func finishReordering() {
+        guard isReordering || draggedTabID != nil else { return }
+        draggedTabID = nil
+        isReordering = false
+        if Defaults[.enableHaptics] {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+    }
+
+    private func persistTabOrder(_ ids: [String]) {
+        guard let data = try? JSONEncoder().encode(ids),
+              let value = String(data: data, encoding: .utf8) else { return }
+        storedTabOrder = value
+    }
+
+    private func scrollSelectedTabIntoView(using proxy: ScrollViewProxy, animated: Bool) {
+        guard let selectedID = tabs.first(where: isSelected)?.id else { return }
+        if animated {
+            withAnimation(.smooth(duration: 0.28)) {
+                proxy.scrollTo(selectedID, anchor: .center)
+            }
+        } else {
+            proxy.scrollTo(selectedID, anchor: .center)
         }
     }
 
@@ -164,7 +303,12 @@ struct TabSelectionView: View {
         if enableMinimalisticUI {
             return true
         }
-        return showStandardMediaControls || showCalendar || showMirror
+        return showCalendar || showMirror
+    }
+
+    private var mediaTabVisible: Bool {
+        showStandardMediaControls
+            && (!autoHideInactiveNotchMediaPlayer || musicManager.hasActiveSession)
     }
 
     private func isSelected(_ tab: TabModel) -> Bool {
@@ -187,6 +331,29 @@ struct TabSelectionView: View {
             coordinator.selectedExtensionExperienceID = nil
         }
         coordinator.currentView = first.view
+    }
+}
+
+private struct TabReorderDropDelegate: DropDelegate {
+    let targetID: String
+    @Binding var draggedID: String?
+    let isEnabled: Bool
+    let move: (String, String) -> Void
+    let finish: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard isEnabled, let draggedID else { return }
+        move(draggedID, targetID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard isEnabled else { return false }
+        finish()
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        isEnabled ? DropProposal(operation: .move) : nil
     }
 }
 

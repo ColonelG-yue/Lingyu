@@ -350,6 +350,7 @@ struct SettingsView: View {
         .toolbar { toolbarSpacingShim }
         .environmentObject(highlightCoordinator)
         .formStyle(.grouped)
+        .preferredColorScheme(.dark)
         .frame(width: 700)
         .onChange(of: searchText) { _, newValue in
             let matches = tabsMatchingSearch(newValue)
@@ -364,15 +365,15 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .glassEffect(
                             .clear
-                                .tint(Color.white.opacity(0.1))
+                                .tint(Color.black.opacity(0.35))
                                 .interactive(),
                             in: .rect(cornerRadius: 18)
                         )
                 } else {
                     ZStack {
-                        Color(NSColor.windowBackgroundColor)
+                        Color.black.opacity(0.92)
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(.ultraThinMaterial)
+                            .fill(.thickMaterial)
                     }
                 }
             }
@@ -704,7 +705,6 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .general, title: "Automatically switch displays", keywords: ["auto switch", "displays"], highlightID: SettingsTab.general.highlightID(for: "Automatically switch displays")),
             SettingsSearchEntry(tab: .general, title: "Hide Dynamic Island during screenshots & recordings", keywords: ["privacy", "screenshot", "recording"], highlightID: SettingsTab.general.highlightID(for: "Hide Dynamic Island during screenshots & recordings")),
             SettingsSearchEntry(tab: .general, title: "Enable gestures", keywords: ["gestures", "trackpad"], highlightID: SettingsTab.general.highlightID(for: "Enable gestures")),
-            SettingsSearchEntry(tab: .general, title: "Close gesture", keywords: ["pinch", "swipe"], highlightID: SettingsTab.general.highlightID(for: "Close gesture")),
             SettingsSearchEntry(tab: .general, title: "Reverse swipe gestures", keywords: ["reverse", "swipe", "media"], highlightID: SettingsTab.general.highlightID(for: "Reverse swipe gestures")),
             SettingsSearchEntry(tab: .general, title: "Reverse scroll gestures", keywords: ["reverse", "scroll", "open", "close"], highlightID: SettingsTab.general.highlightID(for: "Reverse scroll gestures")),
             SettingsSearchEntry(tab: .general, title: "Extend hover area", keywords: ["hover", "cursor"], highlightID: SettingsTab.general.highlightID(for: "Extend hover area")),
@@ -1208,10 +1208,27 @@ struct GeneralSettings: View {
             gestureControls()
         }
         .toolbar {
-            Button("Quit app") {
-                NSApp.terminate(self)
+            Button {
+                SettingsWindowController.shared.minimizeWindow()
+            } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 20, height: 20)
             }
-            .controlSize(.extraLarge)
+            .buttonStyle(.borderedProminent)
+            .tint(.yellow)
+            .foregroundStyle(.black.opacity(0.8))
+            .controlSize(.small)
+            .help("最小化设置窗口")
+
+            Button(role: .destructive) {
+                NSApp.terminate(nil)
+            } label: {
+                Label("退出灵屿", systemImage: "power")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .controlSize(.small)
         }
         .navigationTitle("General")
         .onChange(of: openNotchOnHover) {
@@ -1255,10 +1272,6 @@ struct GeneralSettings: View {
                     .settingsHighlight(id: highlightID("Reverse swipe gestures"))
                 }
 
-                Defaults.Toggle(key: .closeGestureEnabled) {
-                    Text("Close gesture")
-                }
-                .settingsHighlight(id: highlightID("Close gesture"))
                 Slider(value: $gestureSensitivity, in: 100...300, step: 100) {
                     HStack {
                         Text("Gesture sensitivity")
@@ -1268,10 +1281,6 @@ struct GeneralSettings: View {
                     }
                 }
 
-                Defaults.Toggle(key: .reverseScrollGestures) {
-                    Text("Reverse open/close scroll gestures")
-                }
-                .settingsHighlight(id: highlightID("Reverse scroll gestures"))
             }
         } header: {
             HStack {
@@ -1279,7 +1288,7 @@ struct GeneralSettings: View {
                 customBadge(text: "Beta")
             }
         } footer: {
-            Text("Two-finger swipe up on notch to close, two-finger swipe down on notch to open when **Open notch on hover** option is disabled")
+            Text("Two-finger swipe down on the notch to open it when **Open notch on hover** is disabled")
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(.secondary)
                 .font(.caption)
@@ -1402,10 +1411,6 @@ struct Charge: View {
         Form {
             if BatteryActivityManager.shared.hasBattery() {
                 Section {
-                    Defaults.Toggle(key: .showBatteryIndicator) {
-                        Text("Show battery indicator")
-                    }
-                    .settingsHighlight(id: highlightID("Show battery indicator"))
                     Defaults.Toggle(key: .showPowerStatusNotifications) {
                         Text("Show power status notifications")
                     }
@@ -3869,6 +3874,10 @@ struct Shelf: View {
                     Text("Open shelf tab by default if items added")
                 }
                 .settingsHighlight(id: highlightID("Open shelf tab by default if items added"))
+
+                Defaults.Toggle(key: .autoAddNewDownloadsToShelf) {
+                    Text("自动将下载文件夹中新出现的文件加入 Shelf")
+                }
 
                 Defaults.Toggle(key: .expandedDragDetection) {
                     Text("Expanded drag detection area")
@@ -7185,24 +7194,14 @@ struct StatsSettings: View {
 
             if enableLLMUsageFeature {
                 Section {
-                    Defaults.Toggle(key: .enableClaudeProvider) {
-                        Text("Claude")
-                    }
-                    .settingsHighlight(id: highlightID("Claude Provider"))
-
                     Defaults.Toggle(key: .enableCodexProvider) {
                         Text("Codex")
                     }
                     .settingsHighlight(id: highlightID("Codex Provider"))
-
-                    Defaults.Toggle(key: .enableCursorProvider) {
-                        Text("Cursor")
-                    }
-                    .settingsHighlight(id: highlightID("Cursor Provider"))
                 } header: {
                     Text("LLM Providers")
                 } footer: {
-                    Text("Choose which AI providers appear in the Usage tab.")
+                    Text("This fork currently monitors local Codex sessions and usage only.")
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(.secondary)
                         .font(.caption)

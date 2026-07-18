@@ -104,8 +104,10 @@ class DynamicIslandViewCoordinator: ObservableObject {
     static let shared = DynamicIslandViewCoordinator()
     private var cancellables = Set<AnyCancellable>()
     private var hoverOpenSuppressedUntil: Date = .distantPast
+    @AppStorage("atoll.lastNotchView") private var lastNotchViewIdentifier = "home"
+    @Published private(set) var viewBeforeAppFinder: NotchViews = .home
     
-    private static let tabOrder: [NotchViews] = [.home, .shelf, .timer, .stats, .llmUsage, .colorPicker, .notes, .clipboard, .terminal, .extensionExperience]
+    private static let tabOrder: [NotchViews] = [.home, .productivity, .media, .appFinder, .shelf, .timer, .stats, .llmUsage, .colorPicker, .notes, .clipboard, .terminal, .extensionExperience]
     
     /// Direction of the most recent tab switch (true = forward/right, false = backward/left)
     @Published var tabSwitchForward: Bool = true
@@ -115,6 +117,11 @@ class DynamicIslandViewCoordinator: ObservableObject {
             if Defaults[.enableMinimalisticUI] && currentView != .home {
                 currentView = .home
                 return
+            }
+            if currentView == .appFinder, oldValue != .appFinder {
+                viewBeforeAppFinder = oldValue
+            } else if oldValue != currentView {
+                lastNotchViewIdentifier = identifier(for: currentView)
             }
             // Track direction before SwiftUI re-renders
             let oldIdx = Self.tabOrder.firstIndex(of: oldValue) ?? 0
@@ -126,13 +133,41 @@ class DynamicIslandViewCoordinator: ObservableObject {
     
     @Published var statsSecondRowExpansion: CGFloat = 1
     @Published var notesLayoutState: NotesLayoutState = .list
+    @Published var shouldCreateNewNote = false
     @Published var selectedExtensionExperienceID: String?
+    /// The tabs currently visible in the top tab strip. ContentView uses this
+    /// list for trackpad navigation so hidden/disabled tabs are never visited.
+    @Published private(set) var availableTabViews: [NotchViews] = []
+    @Published private(set) var preferredClosedLiveActivity: ClosedLiveActivityPreference = .automatic
+    /// Prevents the global page-swipe recognizer from stealing horizontal
+    /// scrolling while the pointer is over the top tab strip.
+    @Published var isTabStripInteractionActive = false
     
     
     @AppStorage("firstLaunch") var firstLaunch: Bool = true
     @AppStorage("showWhatsNew") var showWhatsNew: Bool = true
     @AppStorage("musicLiveActivityEnabled") var musicLiveActivityEnabled: Bool = true
     @AppStorage("timerLiveActivityEnabled") var timerLiveActivityEnabled: Bool = true
+
+    /// Records an explicit user visit without letting background refreshes steal
+    /// the compact notch. The preference is session-scoped and only applies while
+    /// the corresponding activity remains active.
+    func noteLiveActivityInteraction(for view: NotchViews) {
+        switch view {
+        case .media:
+            preferredClosedLiveActivity = .music
+        case .timer:
+            preferredClosedLiveActivity = .timer
+        case .shelf:
+            preferredClosedLiveActivity = .shelf
+        default:
+            break
+        }
+    }
+
+    func preferDownloadLiveActivity() {
+        preferredClosedLiveActivity = .download
+    }
 
     @Default(.enableTimerFeature) private var enableTimerFeature
     @Default(.timerDisplayMode) private var timerDisplayMode
@@ -148,7 +183,7 @@ class DynamicIslandViewCoordinator: ObservableObject {
         }
     }
     
-    @AppStorage("openLastTabByDefault") var openLastTabByDefault: Bool = false {
+    @AppStorage("openLastTabByDefault") var openLastTabByDefault: Bool = true {
         didSet {
             if openLastTabByDefault {
                 alwaysShowTabs = true
@@ -457,6 +492,83 @@ class DynamicIslandViewCoordinator: ObservableObject {
     
     func showEmpty() {
         currentView = .home
+    }
+
+    func updateAvailableTabViews(_ views: [NotchViews]) {
+        availableTabViews = views
+    }
+
+    func moveToAdjacentTab(forward: Bool) {
+        let views = availableTabViews
+        guard views.count > 1,
+              let currentIndex = views.firstIndex(of: currentView) else { return }
+        let nextIndex = (currentIndex + (forward ? 1 : -1) + views.count) % views.count
+        currentView = views[nextIndex]
+    }
+
+    /// Presents APP Finder as a temporary page without replacing the last
+    /// persistent notch page.
+    func presentAppFinder() {
+        guard currentView != .appFinder else { return }
+        currentView = .appFinder
+    }
+
+    /// Returns from the temporary APP Finder to the page that was visible
+    /// before it was opened.
+    func restoreViewBeforeAppFinder() {
+        guard currentView == .appFinder else { return }
+        currentView = viewBeforeAppFinder == .appFinder ? .home : viewBeforeAppFinder
+    }
+
+    /// Restores the last selected page when the notch is opened again.
+    /// This is intentionally done at open time so the closed notch can remain lightweight.
+    func restoreLastViewIfNeeded() {
+        guard openLastTabByDefault, !AppRuntimeEnvironment.isUITesting else { return }
+        // Older builds persisted APP Finder. It is now a temporary page, so
+        // migrate that stale value to Home once instead of reopening APP.
+        if lastNotchViewIdentifier == "appFinder" {
+            lastNotchViewIdentifier = "home"
+        }
+        guard let restored = view(for: lastNotchViewIdentifier) else { return }
+        guard currentView != restored else { return }
+        currentView = restored
+    }
+
+    private func identifier(for view: NotchViews) -> String {
+        switch view {
+        case .home: return "home"
+        case .productivity: return "productivity"
+        case .media: return "media"
+        case .appFinder: return "appFinder"
+        case .shelf: return "shelf"
+        case .timer: return "timer"
+        case .stats: return "stats"
+        case .llmUsage: return "llmUsage"
+        case .colorPicker: return "colorPicker"
+        case .notes: return "notes"
+        case .clipboard: return "clipboard"
+        case .terminal: return "terminal"
+        case .extensionExperience: return "extensionExperience"
+        }
+    }
+
+    private func view(for identifier: String) -> NotchViews? {
+        switch identifier {
+        case "home": return .home
+        case "productivity": return .productivity
+        case "media": return .media
+        case "appFinder": return .appFinder
+        case "shelf": return .shelf
+        case "timer": return .timer
+        case "stats": return .stats
+        case "llmUsage": return .llmUsage
+        case "colorPicker": return .colorPicker
+        case "notes": return .notes
+        case "clipboard": return .clipboard
+        case "terminal": return .terminal
+        case "extensionExperience": return .extensionExperience
+        default: return nil
+        }
     }
     
     // MARK: - Clipboard Management

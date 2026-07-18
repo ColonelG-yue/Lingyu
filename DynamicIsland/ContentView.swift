@@ -84,6 +84,7 @@ struct ContentView: View {
     @Default(.externalDisplayStyle) var externalDisplayStyle
     @Default(.hideNonNotchUntilHover) var hideNonNotchUntilHover
     @Default(.terminalStickyMode) var terminalStickyMode
+    @Default(.keepNotchExpanded) var keepNotchExpanded
     
     // Battery settings reactivity
     @Default(.showPowerStatusNotifications) var showPowerStatusNotifications
@@ -158,7 +159,14 @@ struct ContentView: View {
         }
         
         if coordinator.currentView == .timer {
-            return CGSize(width: baseSize.width, height: 250) // Extra height for timer presets
+            return CGSize(width: baseSize.width, height: max(baseSize.height, 250))
+        }
+
+        if coordinator.currentView == .appFinder {
+            return CGSize(
+                width: max(baseSize.width, appFinderNotchWidth),
+                height: appFinderNotchHeight
+            )
         }
         
         if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
@@ -201,7 +209,7 @@ struct ContentView: View {
         let extraHeight = CGFloat(additionalRows) * statsAdditionalRowHeight
         return CGSize(width: baseSize.width, height: baseSize.height + extraHeight)
     }
-    
+
 
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
@@ -262,7 +270,7 @@ struct ContentView: View {
     private var dynamicNotchResizeAnimation: Animation? {
         nil
     }
-    
+
     private let zeroHeightHoverPadding: CGFloat = 10
     private let statsAdditionalRowHeight: CGFloat = statsSecondRowContentHeight + statsGridSpacingHeight
     private let musicControlPauseGrace: TimeInterval = 5
@@ -364,10 +372,16 @@ struct ContentView: View {
     }
 
     private var currentNotchShape: NotchShape {
-        let topRadius = (vm.notchState == .open && Defaults[.cornerRadiusScaling])
+        if vm.notchState == .open && coordinator.currentView == .appFinder {
+            return NotchShape(
+                topCornerRadius: appFinderNotchCornerRadii.top,
+                bottomCornerRadius: appFinderNotchCornerRadii.bottom
+            )
+        }
+        let topRadius = vm.notchState == .open
             ? activeCornerRadiusInsets.opened.top
             : activeCornerRadiusInsets.closed.top
-        let bottomRadius = (vm.notchState == .open && Defaults[.cornerRadiusScaling])
+        let bottomRadius = vm.notchState == .open
             ? activeCornerRadiusInsets.opened.bottom
             : activeCornerRadiusInsets.closed.bottom
         return NotchShape(topCornerRadius: topRadius, bottomCornerRadius: bottomRadius)
@@ -429,9 +443,13 @@ struct ContentView: View {
     private var currentPillShape: DynamicIslandPillShape {
         let radius: CGFloat
         if vm.notchState == .open {
-            radius = enableMinimalisticUI
-                ? minimalisticCornerRadiusInsets.opened.top
-                : dynamicIslandPillCornerRadiusInsets.opened
+            if coordinator.currentView == .appFinder {
+                radius = appFinderNotchCornerRadii.bottom
+            } else {
+                radius = enableMinimalisticUI
+                    ? minimalisticCornerRadiusInsets.opened.top
+                    : dynamicIslandPillCornerRadiusInsets.opened
+            }
         } else {
             // Use half the closed height for a true capsule shape
             radius = max(vm.closedNotchSize.height / 2, dynamicIslandPillCornerRadiusInsets.closed.standard)
@@ -523,7 +541,11 @@ struct ContentView: View {
 
     private var mainLayoutBase: some View {
         NotchLayout()
-            .frame(alignment: .top)
+            .frame(
+                width: vm.notchState == .open ? dynamicNotchSize.width : nil,
+                height: vm.notchState == .open ? dynamicNotchSize.height : nil,
+                alignment: .top
+            )
             .padding(.horizontal, notchHorizontalPadding)
             .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
             .background(.black)
@@ -546,7 +568,7 @@ struct ContentView: View {
     private var configuredMainLayout: some View {
         mainLayoutBase
             .conditionalModifier(!useModernCloseAnimation) { view in
-                let hoverAnimation = Animation.bouncy.speed(1.2)
+                let hoverAnimation = Animation.easeOut(duration: 0.16)
                 let notchStateAnimation = Animation.spring.speed(1.2)
                 return view
                     .animation(hoverAnimation, value: isHovering)
@@ -555,9 +577,9 @@ struct ContentView: View {
                     .transition(.blurReplace.animation(.interactiveSpring(dampingFraction: 1.2)))
             }
             .conditionalModifier(useModernCloseAnimation) { view in
-                let hoverAnimation = Animation.bouncy.speed(1.2)
-                let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-                let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
+                let hoverAnimation = Animation.easeOut(duration: 0.16)
+                let openAnimation = Animation.spring(response: 0.28, dampingFraction: 0.92, blendDuration: 0)
+                let closeAnimation = Animation.spring(response: 0.30, dampingFraction: 0.96, blendDuration: 0)
                 let notchAnimation = vm.notchState == .open ? openAnimation : closeAnimation
                 return view
                     .animation(hoverAnimation, value: isHovering)
@@ -581,21 +603,9 @@ struct ContentView: View {
                     }
                     .conditionalModifier(Defaults[.enableGestures]) { view in
                         view
-                            .panGesture(direction: .down) { translation, phase in
-                                handleDownGesture(translation: translation, phase: phase)
+                            .unifiedPanGesture { value in
+                                handlePanGesture(value)
                             }
-                            .panGesture(direction: .left) { translation, phase in
-                                handleSkipGesture(direction: .forward, translation: translation, phase: phase)
-                            }
-                            .panGesture(direction: .right) { translation, phase in
-                                handleSkipGesture(direction: .backward, translation: translation, phase: phase)
-                            }
-                    }
-            }
-            .conditionalModifier((Defaults[.closeGestureEnabled] || Defaults[.reverseScrollGestures]) && Defaults[.enableGestures] && interactionsEnabled) { view in
-                view
-                    .panGesture(direction: .up) { translation, phase in
-                        handleUpGesture(translation: translation, phase: phase)
                     }
             }
             // Shadow bottom padding and hide-until-hover offset applied AFTER
@@ -607,7 +617,13 @@ struct ContentView: View {
                 : 0
             )
             .onAppear(perform: {
-                if coordinator.firstLaunch {
+                if AppRuntimeEnvironment.isUITesting {
+                    runAfter(0.2) {
+                        withAnimation(.none) {
+                            vm.open()
+                        }
+                    }
+                } else if coordinator.firstLaunch {
                     // Single open during first launch; closeHello() handles the timed close.
                     runAfter(1) {
                         withAnimation(vm.animation) {
@@ -938,6 +954,31 @@ struct ContentView: View {
                       } else if vm.notchState == .closed && capsLockManager.isCapsLockActive && Defaults[.enableCapsLockIndicator] && !vm.hideOnClosed && !lockScreenManager.isLocked {
                           InlineHUD(type: .constant(.capsLock), value: .constant(1.0), icon: .constant(""), hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(AnyTransition.move(edge: .trailing).combined(with: .opacity))
+                      } else if coordinator.preferredClosedLiveActivity == .timer
+                                    && (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .timer)
+                                    && vm.notchState == .closed
+                                    && timerManager.isTimerActive
+                                    && coordinator.timerLiveActivityEnabled
+                                    && !vm.hideOnClosed {
+                          TimerLiveActivity()
+                              .transition(closedLiveActivitySwapTransition)
+                      } else if coordinator.preferredClosedLiveActivity == .download
+                                    && (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .download)
+                                    && vm.notchState == .closed
+                                    && downloadManager.isDownloading
+                                    && Defaults[.enableDownloadListener]
+                                    && !vm.hideOnClosed {
+                          DownloadLiveActivity()
+                              .transition(closedLiveActivitySwapTransition)
+                      } else if coordinator.preferredClosedLiveActivity == .shelf
+                                    && !isCurrentScreenExpansionVisible
+                                    && vm.notchState == .closed
+                                    && !shelfState.isEmpty
+                                    && !vm.hideOnClosed
+                                    && !lockScreenManager.isLocked
+                                    && !enableMinimalisticUI {
+                          ShelfInlineLiveActivity()
+                              .transition(closedLiveActivitySwapTransition)
                       } else if canShowMusicDuringExpansion && musicPairingEligible {
                           MusicLiveActivity(secondary: musicSecondary)
                               .id("closed-music-live-activity")
@@ -1084,6 +1125,12 @@ struct ContentView: View {
                           switch coordinator.currentView {
                               case .home:
                                   NotchHomeView(albumArtNamespace: albumArtNamespace)
+            case .productivity:
+                ProductivityPanelView()
+            case .media:
+                NotchMediaView(albumArtNamespace: albumArtNamespace)
+            case .appFinder:
+                AppFinderPanelView()
                               case .shelf:
                                   NotchShelfView()
                               case .timer:
@@ -1097,7 +1144,7 @@ struct ContentView: View {
                             case .notes:
                                 NotchNotesView()
                             case .clipboard:
-                                NotchNotesView()
+                                NotchClipboardList()
                             case .terminal:
                                 NotchTerminalView()
                             case .extensionExperience:
@@ -1110,6 +1157,10 @@ struct ContentView: View {
                       }
                       .id(coordinator.currentView)
                       .transition(tabSwitchTransition)
+
+                      if !enableMinimalisticUI {
+                          expandedPanelControls
+                      }
                   }
               }
               .zIndex(1)
@@ -1171,6 +1222,11 @@ struct ContentView: View {
     @ViewBuilder
     func DynamicIslandFaceAnimation() -> some View {
         let sideSize = max(0, vm.effectiveClosedNotchHeight - 12)
+        let centerExclusionWidth = closedActivityCenterExclusionWidth(
+            baseWidth: vm.closedNotchSize.width,
+            screenName: currentScreenName,
+            nonNotchAdjustment: -20
+        )
         HStack {
             HStack {
                 Rectangle()
@@ -1178,7 +1234,7 @@ struct ContentView: View {
                     .frame(width: sideSize, height: sideSize)
                 Rectangle()
                     .fill(.black)
-                    .frame(width: vm.closedNotchSize.width - 20)
+                    .frame(width: centerExclusionWidth)
                 IdleAnimationView()
                     .frame(width: sideSize, height: sideSize)
             }
@@ -1190,7 +1246,10 @@ struct ContentView: View {
         let secondary = preResolvedSecondary ?? resolveMusicSecondaryLiveActivity()
         let notchContentHeight = max(0, vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12))
         let wingBaseWidth = max(0, vm.effectiveClosedNotchHeight - (isHovering ? 0 : 12) + gestureProgress / 2)
-        let rawCenterBaseWidth = vm.closedNotchSize.width + (isHovering ? 8 : 0)
+        let rawCenterBaseWidth = closedActivityCenterExclusionWidth(
+            baseWidth: vm.closedNotchSize.width,
+            screenName: currentScreenName
+        ) + (isHovering ? 8 : 0)
         let centerBaseWidth = max(rawCenterBaseWidth, 96)
         let inlineSneakPeekActive = (
             coordinator.expandingView.show &&
@@ -1880,7 +1939,7 @@ struct ContentView: View {
 
     // MARK: - Private Methods
     private func openNotch() {
-        withAnimation(.bouncy.speed(1.2)) {
+        withAnimation(.easeOut(duration: 0.18)) {
             vm.open()
         }
     }
@@ -2078,12 +2137,8 @@ struct ContentView: View {
         }
 
         if hovering {
-            withAnimation(.bouncy.speed(1.2)) {
+            withAnimation(.easeOut(duration: 0.16)) {
                 isHovering = true
-            }
-
-            if vm.notchState == .closed && Defaults[.enableHaptics] {
-                triggerHapticIfAllowed()
             }
 
             let shouldFocusTimerTab = enableTimerFeature && timerDisplayMode == .tab && timerManager.isTimerActive && !enableMinimalisticUI
@@ -2093,7 +2148,12 @@ struct ContentView: View {
                 (Defaults[.openNotchOnHover] || shouldFocusTimerTab) else { return }
 
             hoverTask = Task {
-                try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
+                // Hover is only an intent signal, not a click. Respect the user's
+                // configured delay so briefly crossing the notch does not feel as
+                // though the app clicked or opened itself.
+                let configuredDelay = Defaults[.minimumHoverDuration]
+                let hoverDelay = min(max(configuredDelay, 0.15), 1.0)
+                try? await Task.sleep(for: .milliseconds(Int(hoverDelay * 1000)))
                 guard !Task.isCancelled else { return }
 
                 await MainActor.run {
@@ -2112,11 +2172,11 @@ struct ContentView: View {
             }
         } else {
             hoverTask = Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(180))
                 guard !Task.isCancelled else { return }
 
                 await MainActor.run {
-                    withAnimation(.bouncy.speed(1.2)) {
+                    withAnimation(.easeOut(duration: 0.16)) {
                         self.isHovering = false
                     }
 
@@ -2159,7 +2219,47 @@ struct ContentView: View {
     }
 
     private func shouldPreventAutoClose() -> Bool {
-        coordinator.firstLaunch || hasAnyActivePopovers() || vm.isAutoCloseSuppressed || SharingStateManager.shared.preventNotchClose || (Defaults[.terminalStickyMode] && coordinator.currentView == .terminal)
+        keepNotchExpanded || coordinator.firstLaunch || hasAnyActivePopovers() || vm.isAutoCloseSuppressed || SharingStateManager.shared.preventNotchClose || (Defaults[.terminalStickyMode] && coordinator.currentView == .terminal)
+    }
+
+    private var expandedPanelControls: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 8) {
+                Spacer()
+                Button {
+                    withAnimation(.smooth(duration: 0.22)) {
+                        coordinator.presentAppFinder()
+                    }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 30, height: 30)
+                        .background(.white.opacity(coordinator.currentView == .appFinder ? 0.18 : 0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.92))
+                .help("搜索应用")
+
+                Button {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        keepNotchExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: keepNotchExpanded ? "lock.fill" : "lock.open")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 30, height: 30)
+                        .background(keepNotchExpanded ? Color.accentColor.opacity(0.72) : .white.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .help(keepNotchExpanded ? "取消锁定展开" : "锁定灵动岛展开")
+            }
+            .padding(.trailing, 18)
+            .padding(.bottom, 16)
+        }
+        .allowsHitTesting(true)
+        .zIndex(20)
     }
     
     // Helper to prevent rapid haptic feedback
@@ -2255,79 +2355,96 @@ struct ContentView: View {
     }
     
     // MARK: - Gesture Handling
-    
-    private func handleDownGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        handleScrollGesture(isDownward: true, translation: translation, phase: phase)
-    }
-    
-    private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        handleScrollGesture(isDownward: false, translation: translation, phase: phase)
-    }
 
-    private func handleScrollGesture(isDownward: Bool, translation: CGFloat, phase: NSEvent.Phase) {
-        let reverse = Defaults[.reverseScrollGestures]
-        let shouldOpen = isDownward ? !reverse : reverse
-
-        if shouldOpen {
-            handleOpenScrollGesture(translation: translation, phase: phase)
-        } else {
-            guard Defaults[.closeGestureEnabled] else { return }
-            handleCloseScrollGesture(translation: translation, phase: phase)
+    private func handlePanGesture(_ value: PanGestureValue) {
+        switch value.direction {
+        case .down:
+            handleOpenScrollGesture(value)
+        case .left:
+            handleHorizontalGesture(direction: .forward, value: value)
+        case .right:
+            handleHorizontalGesture(direction: .backward, value: value)
+        case .up:
+            break
         }
     }
 
-    private func handleOpenScrollGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .closed else { return }
+    private func shouldCommitPan(_ value: PanGestureValue) -> Bool {
+        value.isDiscreteSwipe
+            || value.translation >= Defaults[.gestureSensitivity]
+            || value.velocity >= 650
+    }
 
-        withAnimation(.smooth) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * 20
+    private func shouldCommitTabSwitch(_ value: PanGestureValue) -> Bool {
+        let distanceThreshold = min(max(Defaults[.gestureSensitivity] * 0.42, 72), 120)
+        return value.isDiscreteSwipe
+            || value.translation >= distanceThreshold
+            || (value.translation >= 30 && value.velocity >= 1_150)
+    }
+
+    /// Horizontal trackpad gestures keep media skip behavior when appropriate;
+    /// otherwise they move between the visible top-level Atoll tabs.
+    private func handleHorizontalGesture(
+        direction: MusicManager.SkipDirection,
+        value: PanGestureValue
+    ) {
+        if canPerformSkipGesture() {
+            handleSkipGesture(direction: direction, value: value)
+            return
         }
 
-        if phase == .ended {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-            }
+        if value.phase == .ended {
+            skipGestureActiveDirection = nil
+            return
         }
 
-        if translation > Defaults[.gestureSensitivity] {
+        let scrollGestureBlocksTabSwitch = vm.isScrollGestureActive
+            && coordinator.currentView != .terminal
+
+        guard vm.notchState == .open,
+              !hasAnyActivePopovers(),
+              !coordinator.isTabStripInteractionActive,
+              !scrollGestureBlocksTabSwitch,
+              !coordinator.availableTabViews.isEmpty else {
+            skipGestureActiveDirection = nil
+            return
+        }
+
+        if skipGestureActiveDirection == nil && shouldCommitTabSwitch(value) {
+            skipGestureActiveDirection = direction
             if Defaults[.enableHaptics] {
                 triggerHapticIfAllowed()
             }
-            withAnimation(.smooth) {
+            withAnimation(.interactiveSpring(response: 0.30, dampingFraction: 0.90)) {
+                coordinator.moveToAdjacentTab(forward: direction == .forward)
+            }
+        }
+    }
+
+    private func handleOpenScrollGesture(_ value: PanGestureValue) {
+        guard vm.notchState == .closed else { return }
+
+        // Follow the fingers directly while dragging. Animation here makes the
+        // notch lag behind the physical gesture.
+        gestureProgress = min((value.translation / Defaults[.gestureSensitivity]) * 20, 20)
+
+        if value.phase == .ended {
+            withAnimation(.interactiveSpring(response: 0.20, dampingFraction: 0.92)) {
                 gestureProgress = .zero
             }
+        }
+
+        if shouldCommitPan(value) {
+            if Defaults[.enableHaptics] {
+                triggerHapticIfAllowed()
+            }
+            gestureProgress = .zero
             openNotch()
         }
     }
 
-    private func handleCloseScrollGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open, !vm.isHoveringCalendar, !vm.isScrollGestureActive else { return }
-
-        withAnimation(.smooth) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20
-        }
-
-        if phase == .ended {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-            }
-        }
-
-        if translation > Defaults[.gestureSensitivity] {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-                isHovering = false
-            }
-            vm.close()
-
-            if Defaults[.enableHaptics] {
-                triggerHapticIfAllowed()
-            }
-        }
-    }
-
-    private func handleSkipGesture(direction: MusicManager.SkipDirection, translation: CGFloat, phase: NSEvent.Phase) {
-        if phase == .ended {
+    private func handleSkipGesture(direction: MusicManager.SkipDirection, value: PanGestureValue) {
+        if value.phase == .ended {
             skipGestureActiveDirection = nil
             return
         }
@@ -2337,7 +2454,7 @@ struct ContentView: View {
             return
         }
 
-        if skipGestureActiveDirection == nil && translation > Defaults[.gestureSensitivity] {
+        if skipGestureActiveDirection == nil && shouldCommitPan(value) {
             let effectiveDirection: MusicManager.SkipDirection
             if Defaults[.reverseSwipeGestures] {
                 effectiveDirection = direction == .forward ? .backward : .forward
@@ -2355,11 +2472,13 @@ struct ContentView: View {
     }
 
     private func canPerformSkipGesture() -> Bool {
-        let canSkipInOpenHome = vm.notchState == .open && coordinator.currentView == .home
+        let canSkipInOpenMedia = vm.notchState == .open
+            && (coordinator.currentView == .media
+                || (enableMinimalisticUI && coordinator.currentView == .home))
         let canSkipInClosedMusic = !Defaults[.openNotchOnHover] && isClosedMusicGestureContext
 
         return enableHorizontalMusicGestures
-            && (canSkipInOpenHome || canSkipInClosedMusic)
+            && (canSkipInOpenMedia || canSkipInClosedMusic)
             && (!musicManager.isPlayerIdle || musicManager.bundleIdentifier != nil)
             && !lockScreenManager.isLocked
             && !hasAnyActivePopovers()

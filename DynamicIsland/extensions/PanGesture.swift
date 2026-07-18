@@ -23,126 +23,264 @@
 import AppKit
 import SwiftUI
 
-enum PanDirection {
+enum PanDirection: Equatable {
     case left, right, up, down
 
     var isHorizontal: Bool { self == .left || self == .right }
-    var sign: CGFloat { (self == .right || self == .down) ? 1 : -1 }
 
-    func signed(from translation: CGSize) -> CGFloat { (isHorizontal ? translation.width : translation.height) * sign }
-    func signed(deltaX: CGFloat, deltaY: CGFloat) -> CGFloat { (isHorizontal ? deltaX : deltaY) * sign }
-}
-
-extension View {
-    func panGesture(direction: PanDirection, threshold: CGFloat = 4, action: @escaping (CGFloat, NSEvent.Phase) -> Void) -> some View {
-        self
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let s = direction.signed(from: value.translation)
-                        guard s > 0, s.magnitude >= threshold else { return }
-                        action(s.magnitude, .changed)
-                    }
-                    .onEnded { _ in action(0, .ended) }
-            )
-            .background(ScrollMonitor(direction: direction, threshold: threshold, action: action))
+    static func dominant(deltaX: CGFloat, deltaY: CGFloat) -> PanDirection? {
+        guard max(abs(deltaX), abs(deltaY)) > 0 else { return nil }
+        if abs(deltaX) >= abs(deltaY) {
+            return deltaX < 0 ? .left : .right
+        }
+        return deltaY > 0 ? .down : .up
     }
 }
 
-private struct ScrollMonitor: NSViewRepresentable {
+struct PanGestureValue {
     let direction: PanDirection
+    let translation: CGFloat
+    let velocity: CGFloat
+    let phase: NSEvent.Phase
+    let isDiscreteSwipe: Bool
+}
+
+extension View {
+    /// Installs one gesture pipeline for every pan direction. Keeping this as
+    /// one modifier is important: three separate NSEvent monitors race each
+    /// other and can reset the same trackpad gesture before it commits.
+    func unifiedPanGesture(
+        threshold: CGFloat = 4,
+        action: @escaping (PanGestureValue) -> Void
+    ) -> some View {
+        gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard let direction = PanDirection.dominant(
+                        deltaX: value.translation.width,
+                        deltaY: value.translation.height
+                    ) else { return }
+                    let distance = direction.isHorizontal
+                        ? abs(value.translation.width)
+                        : abs(value.translation.height)
+                    guard distance >= threshold else { return }
+                    action(.init(
+                        direction: direction,
+                        translation: distance,
+                        velocity: 0,
+                        phase: .changed,
+                        isDiscreteSwipe: false
+                    ))
+                }
+                .onEnded { value in
+                    guard let direction = PanDirection.dominant(
+                        deltaX: value.translation.width,
+                        deltaY: value.translation.height
+                    ) else { return }
+                    let distance = direction.isHorizontal
+                        ? abs(value.translation.width)
+                        : abs(value.translation.height)
+                    action(.init(
+                        direction: direction,
+                        translation: distance,
+                        velocity: 0,
+                        phase: .ended,
+                        isDiscreteSwipe: false
+                    ))
+                }
+        )
+        .background(UnifiedScrollMonitor(threshold: threshold, action: action))
+    }
+}
+
+private struct UnifiedScrollMonitor: NSViewRepresentable {
     let threshold: CGFloat
-    let action: (CGFloat, NSEvent.Phase) -> Void
+    let action: (PanGestureValue) -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         context.coordinator.installMonitor(on: view)
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.removeMonitor() }
 
-    func makeCoordinator() -> Coordinator { 
-        Coordinator(direction: direction, threshold: threshold, action: action) 
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(action: action)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(threshold: threshold, action: action)
     }
 
     @MainActor final class Coordinator: NSObject {
-        private let direction: PanDirection
         private let threshold: CGFloat
-        private let action: (CGFloat, NSEvent.Phase) -> Void
+        private var action: (PanGestureValue) -> Void
         private var monitor: Any?
-        private var globalMonitor: Any?
-        private var accumulated: CGFloat = 0
-        private var active = false
-        private let noiseThreshold: CGFloat = 0.2
         private weak var observedView: NSView?
-        /// Small vertical inset so scroll gestures fire when the cursor
-        /// "kisses" the very top of the screen inside the physical notch
-        /// area. Kept at zero horizontally to avoid unwanted hover opens
-        /// from the sides.
+        private var lockedDirection: PanDirection?
+        private var accumulated: CGFloat = 0
+        private var pendingX: CGFloat = 0
+        private var pendingY: CGFloat = 0
+        private var gestureStartedAt: TimeInterval?
+        private let noiseThreshold: CGFloat = 0.2
+        private let axisDominanceRatio: CGFloat = 1.25
+        private let intentDistance: CGFloat = 10
         private let verticalEdgeInset: CGFloat = 4
-        private var lastEventTimestamp: TimeInterval = 0
 
-        init(direction: PanDirection, threshold: CGFloat, action: @escaping (CGFloat, NSEvent.Phase) -> Void) {
-            self.direction = direction
+        init(threshold: CGFloat, action: @escaping (PanGestureValue) -> Void) {
             self.threshold = threshold
+            self.action = action
+        }
+
+        func update(action: @escaping (PanGestureValue) -> Void) {
             self.action = action
         }
 
         func installMonitor(on view: NSView) {
             removeMonitor()
             observedView = view
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
-                guard let self else { return event }
-                self.handleScroll(event)
+
+            // A local monitor is sufficient for scrolls delivered to Atoll's
+            // panel. A global monitor required Accessibility permission and
+            // also duplicated events whenever Atoll itself was active.
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .swipe]) { [weak self] event in
+                self?.handle(event)
                 return event
-            }
-            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
-                self?.handleScroll(event)
             }
         }
 
         func removeMonitor() {
-            if let monitor = monitor {
+            if let monitor {
                 NSEvent.removeMonitor(monitor)
                 self.monitor = nil
             }
-            if let globalMonitor = globalMonitor {
-                NSEvent.removeMonitor(globalMonitor)
-                self.globalMonitor = nil
-            }
-            accumulated = 0
-            active = false
+            reset()
             observedView = nil
-            lastEventTimestamp = 0
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard isCursorNearObservedView(using: event) else { return }
+
+            if event.type == .swipe {
+                handleDiscreteSwipe(event)
+            } else {
+                handleScroll(event)
+            }
+        }
+
+        /// Three-finger gestures may arrive as a single `.swipe` event whose
+        /// delta is only around 1. Mark it as discrete instead of pretending
+        /// that value is a pixel distance; the caller can commit immediately.
+        private func handleDiscreteSwipe(_ event: NSEvent) {
+            guard let direction = PanDirection.dominant(deltaX: event.deltaX, deltaY: event.deltaY) else { return }
+            action(.init(
+                direction: direction,
+                translation: 0,
+                velocity: .infinity,
+                phase: .began,
+                isDiscreteSwipe: true
+            ))
+            action(.init(
+                direction: direction,
+                translation: 0,
+                velocity: .infinity,
+                phase: .ended,
+                isDiscreteSwipe: true
+            ))
+            reset()
         }
 
         private func handleScroll(_ event: NSEvent) {
-            guard lastEventTimestamp != event.timestamp else { return }
-            lastEventTimestamp = event.timestamp
-            guard isCursorNearObservedView(using: event) else { return }
-
             if event.phase == .ended || event.momentumPhase == .ended {
-                if active {
-                    action(accumulated.magnitude, .ended)
-                } else {
-                    action(0, .ended)
-                }
-                active = false
-                accumulated = 0
+                finish(at: event.timestamp)
                 return
             }
 
-            let s = direction.signed(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
-            guard s.magnitude > noiseThreshold else { return }
-            accumulated = s > 0 ? accumulated + s : 0
+            // Momentum belongs to the gesture that has already ended. Ignoring
+            // it prevents one flick from advancing through multiple tabs.
+            guard event.momentumPhase.isEmpty else { return }
 
-            if !active && accumulated >= threshold {
-                active = true
-                action(accumulated.magnitude, .began)
-            } else if active {
-                action(accumulated.magnitude, .changed)
+            let deltaX = event.scrollingDeltaX
+            let deltaY = event.scrollingDeltaY
+            guard max(abs(deltaX), abs(deltaY)) > noiseThreshold else { return }
+
+            if lockedDirection == nil {
+                pendingX += deltaX
+                pendingY += deltaY
+
+                let horizontalDistance = abs(pendingX)
+                let verticalDistance = abs(pendingY)
+                guard max(horizontalDistance, verticalDistance) >= max(threshold, intentDistance) else { return }
+
+                let horizontalIntent = horizontalDistance >= verticalDistance * axisDominanceRatio
+                let verticalIntent = verticalDistance >= horizontalDistance * axisDominanceRatio
+                guard horizontalIntent || verticalIntent else { return }
+
+                guard let candidate = PanDirection.dominant(deltaX: pendingX, deltaY: pendingY) else { return }
+                lockedDirection = candidate
+                accumulated = candidate.isHorizontal ? horizontalDistance : verticalDistance
+                gestureStartedAt = event.timestamp
+            } else if let direction = lockedDirection {
+                let primaryDelta = direction.isHorizontal ? deltaX : deltaY
+                let eventDirection = PanDirection.dominant(
+                    deltaX: direction.isHorizontal ? primaryDelta : 0,
+                    deltaY: direction.isHorizontal ? 0 : primaryDelta
+                )
+                // Small reversals should not abruptly change the locked axis.
+                if eventDirection == direction {
+                    accumulated += abs(primaryDelta)
+                } else {
+                    accumulated = max(threshold, accumulated - abs(primaryDelta) * 0.35)
+                }
             }
+
+            guard let direction = lockedDirection else { return }
+            let velocity = currentVelocity(at: event.timestamp)
+            action(.init(
+                direction: direction,
+                translation: accumulated,
+                velocity: velocity,
+                phase: accumulated <= threshold ? .began : .changed,
+                isDiscreteSwipe: false
+            ))
+
+            // Mouse wheels often have no phase information. Finish each such
+            // event so the interaction never remains permanently locked.
+            if event.phase.isEmpty && event.momentumPhase.isEmpty && !event.hasPreciseScrollingDeltas {
+                finish(at: event.timestamp)
+            }
+        }
+
+        private func finish(at timestamp: TimeInterval) {
+            guard let direction = lockedDirection else {
+                reset()
+                return
+            }
+            action(.init(
+                direction: direction,
+                translation: accumulated,
+                velocity: currentVelocity(at: timestamp),
+                phase: .ended,
+                isDiscreteSwipe: false
+            ))
+            reset()
+        }
+
+        private func currentVelocity(at timestamp: TimeInterval) -> CGFloat {
+            guard let gestureStartedAt else { return 0 }
+            let elapsed = max(timestamp - gestureStartedAt, 1.0 / 120.0)
+            return accumulated / elapsed
+        }
+
+        private func reset() {
+            lockedDirection = nil
+            accumulated = 0
+            pendingX = 0
+            pendingY = 0
+            gestureStartedAt = nil
         }
 
         private func isCursorNearObservedView(using event: NSEvent) -> Bool {
@@ -158,11 +296,6 @@ private struct ScrollMonitor: NSViewRepresentable {
 
             let windowPoint = window.convertPoint(fromScreen: screenPoint)
             let localPoint = view.convert(windowPoint, from: nil)
-
-            // Extend the hit area vertically by a few points so the cursor
-            // at the very top screen edge (kissing the notch) still triggers
-            // scroll gestures. No horizontal extension to prevent false opens
-            // from the sides of the notch.
             let hitArea = view.bounds.insetBy(dx: 0, dy: -verticalEdgeInset)
             return hitArea.contains(localPoint)
         }

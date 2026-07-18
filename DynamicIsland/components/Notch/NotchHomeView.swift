@@ -688,14 +688,11 @@ struct NotchHomeView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
     @ObservedObject private var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
-    @ObservedObject private var musicManager = MusicManager.shared
-    @Default(.showStandardMediaControls) private var showStandardMediaControls
-    @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
     let albumArtNamespace: Namespace.ID
 
-    /// Whether the music player should actively display (enabled AND has real content).
-    private var shouldShowMusicPlayer: Bool {
-        showStandardMediaControls && (!autoHideInactiveNotchMediaPlayer || musicManager.hasActiveSession)
+    private var hasNormalHomeContent: Bool {
+        Defaults[.showCalendar]
+            || (Defaults[.showMirror] && webcamManager.cameraAvailable)
     }
     
     var body: some View {
@@ -719,20 +716,14 @@ struct NotchHomeView: View {
                     MinimalisticMusicPlayerView(albumArtNamespace: albumArtNamespace)
                 }
             } else {
-                // Normal mode: Show full music player with optional calendar and webcam
-                if shouldShowMusicPlayer {
-                    MusicPlayerView(albumArtNamespace: albumArtNamespace)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                // Normal mode keeps media on its own tab so calendar never gets squeezed.
+                if !hasNormalHomeContent {
+                    emptyHomeState
+                        .frame(maxWidth: .infinity)
                 }
                 
                 if Defaults[.showCalendar] {
-                    Group {
-                        if shouldShowMusicPlayer {
-                            CalendarView()
-                        } else {
-                            StandaloneCalendarView()
-                        }
-                    }
+                    StandaloneCalendarView()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onHover { isHovering in
                         vm.isHoveringCalendar = isHovering
@@ -755,6 +746,26 @@ struct NotchHomeView: View {
             .combined(with: .move(edge: .top)))
         .blur(radius: vm.notchState == .closed ? 30 : 0)
         .padding(Defaults[.enableMinimalisticUI] ? 0 : 8) //Putting the main padding for home view here for consistency
+    }
+
+    private var emptyHomeState: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(spacing: 6) {
+                Text(context.date, style: .time)
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                Text(context.date, format: .dateTime.month().day().weekday(.wide))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("启用日历或镜子后将在这里显示", systemImage: "house")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.8))
+                    .padding(.top, 3)
+            }
+            .frame(maxWidth: .infinity, minHeight: 128)
+            .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 
     private var minimalisticOverridePayload: ExtensionNotchExperiencePayload? {

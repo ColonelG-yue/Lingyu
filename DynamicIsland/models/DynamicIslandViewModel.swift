@@ -98,9 +98,9 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         guard Defaults[.clipboardDisplayMode] == .separateTab else { return }
         guard let lastCopyDate = ClipboardManager.shared.lastCopiedItemDate else { return }
         guard Date().timeIntervalSince(lastCopyDate) <= clipboardFocusWindow else { return }
-        guard coordinator.currentView != .notes else { return }
+        guard coordinator.currentView != .clipboard else { return }
         withAnimation(.smooth) {
-            coordinator.currentView = .notes
+            coordinator.currentView = .clipboard
         }
     }
     
@@ -332,6 +332,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
     }
 
     func open() {
+        coordinator.restoreLastViewIfNeeded()
         let targetSize = calculateDynamicNotchSize()
 
         let applyWindowResize: () -> Void = {
@@ -361,6 +362,12 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize(isDynamicIslandMode: shouldUseDynamicIslandMode(for: screen)) : openNotchSize
         var adjustedSize = baseSize
 
+        if coordinator.currentView == .appFinder {
+            adjustedSize.width = max(adjustedSize.width, appFinderNotchWidth)
+            adjustedSize.height = appFinderNotchHeight
+            return adjustedSize
+        }
+
         if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
             let preferred = coordinator.notesLayoutState.preferredHeight
             adjustedSize.height = max(adjustedSize.height, preferred)
@@ -375,6 +382,11 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
     }
 
     func close() {
+        let wasShowingAppFinder = coordinator.currentView == .appFinder
+        if wasShowingAppFinder {
+            coordinator.restoreViewBeforeAppFinder()
+        }
+
         let targetSize = getClosedNotchSize(screen: screen)
         notchSize = targetSize
         closedNotchSize = targetSize
@@ -382,12 +394,20 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         resetScrollGestureSuppression()
         resetAutoCloseSuppression()
 
-        // Set the current view to shelf if it contains files and the user enables openShelfByDefault
-        // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-        if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] && !Defaults[.enableMinimalisticUI] {
-            coordinator.currentView = .shelf
+        // Preserve the page the user actually closed. Shelf's legacy
+        // "open by default" behavior is only a fallback when page memory is
+        // disabled; otherwise it overwrites `lastNotchViewIdentifier` on every
+        // close and makes the notch appear stuck on Shelf.
+        if wasShowingAppFinder {
+            // APP Finder is temporary. Its previous page was restored above.
         } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
+            if !ShelfStateViewModel.shared.isEmpty
+                && Defaults[.openShelfByDefault]
+                && !Defaults[.enableMinimalisticUI] {
+                coordinator.currentView = .shelf
+            } else {
+                coordinator.currentView = .home
+            }
         }
     }
 

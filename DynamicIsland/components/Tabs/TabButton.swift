@@ -20,6 +20,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import AppKit
 import SwiftUI
 
 struct TabButton: View {
@@ -30,10 +31,24 @@ struct TabButton: View {
     
     var body: some View {
         Button(action: onClick) {
-            Image(systemName: icon)
+            Group {
+                if label == "APP" {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: "/System/Applications/App Store.app"))
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 25, height: 25)
+                        .shadow(color: .black.opacity(0.28), radius: 2, y: 1)
+                        .accessibilityLabel("应用程序")
+                } else {
+                    Image(systemName: icon)
+                }
+            }
                 .contentShape(Capsule())
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("Atoll.Tab.\(label)")
     }
 }
 

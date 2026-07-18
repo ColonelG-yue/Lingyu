@@ -26,13 +26,18 @@ import SwiftUI
 
 let downloadSneakSize: CGSize = .init(width: 65, height: 1)
 let batterySneakSize: CGSize = .init(width: 160, height: 1)
+let expandedNotchMinimumWidth: CGFloat = 792
+let expandedNotchHeight: CGFloat = 363
+let appFinderNotchWidth: CGFloat = 880
+let appFinderNotchHeight: CGFloat = 638
+let appFinderNotchCornerRadii: (top: CGFloat, bottom: CGFloat) = (top: 46, bottom: 70)
 
 var openNotchSize: CGSize {
     let storedWidth = Defaults[.openNotchWidth]
     let minWidth = currentRecommendedMinimumNotchWidth()
     let maxWidth = maxAllowedNotchWidth()
-    let width = min(max(storedWidth, minWidth), maxWidth)
-    return .init(width: width, height: 200)
+    let width = min(max(storedWidth, minWidth, expandedNotchMinimumWidth), maxWidth)
+    return .init(width: width, height: expandedNotchHeight)
 }
 
 /// Maximum notch width based on the current screen's point width.
@@ -60,10 +65,17 @@ func maxAllowedNotchWidth() -> CGFloat {
 /// Counts the number of currently enabled standard notch tabs.
 /// Mirrors the tab-building logic in ``TabSelectionView``.
 func enabledStandardTabCount() -> Int {
-    var count = 0
+    // Quick actions, App Finder and Codex are always present in normal mode.
+    var count = Defaults[.enableMinimalisticUI] ? 0 : 3
 
     // Home tab
-    if Defaults[.showStandardMediaControls] || Defaults[.showCalendar] || Defaults[.showMirror] {
+    if Defaults[.enableMinimalisticUI] || Defaults[.showCalendar] || Defaults[.showMirror] {
+        count += 1
+    }
+
+    // Reserve room for the media tab whenever the feature is enabled. The tab
+    // may temporarily auto-hide while idle, but the notch should not resize.
+    if !Defaults[.enableMinimalisticUI] && Defaults[.showStandardMediaControls] {
         count += 1
     }
 
@@ -74,11 +86,6 @@ func enabledStandardTabCount() -> Int {
 
     // Timer tab (only in .tab display mode)
     if Defaults[.enableTimerFeature] && Defaults[.timerDisplayMode] == .tab {
-        count += 1
-    }
-
-    // Stats tab
-    if Defaults[.enableStatsFeature] {
         count += 1
     }
 
@@ -156,7 +163,7 @@ func minimalisticOpenNotchSize(isDynamicIslandMode: Bool) -> CGSize {
 
     return size
 }
-let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
+let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 42, bottom: 64), closed: (top: 7, bottom: 16))
 let minimalisticCornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 35, bottom: 35), closed: cornerRadiusInsets.closed)
 
 // MARK: - Terminal tab clip (notch surface)
@@ -195,7 +202,7 @@ func notchTerminalBottomCornerRadii(
         return cornerRadiusInsets
     }()
     let outerBottom: CGFloat
-    if notchState == .open && cornerRadiusScaling {
+    if notchState == .open {
         outerBottom = active.opened.bottom
     } else {
         outerBottom = active.closed.bottom
@@ -270,11 +277,31 @@ func shouldUseDynamicIslandMode(for screenName: String?) -> Bool {
     return screen.safeAreaInsets.top <= 0
 }
 
+/// The physical camera housing can visually cover a few points beyond the
+/// reported auxiliary-area boundary because of panel rounding and scaling.
+/// Closed live activities reserve this extra width so icons never touch it.
+func screenHasPhysicalNotch(_ screenName: String?) -> Bool {
+    var selectedScreen: NSScreen? = NSScreen.main
+    if let screenName {
+        selectedScreen = NSScreen.screens.first(where: { $0.localizedName == screenName })
+    }
+    return (selectedScreen?.safeAreaInsets.top ?? 0) > 0
+}
+
+func closedActivityCenterExclusionWidth(
+    baseWidth: CGFloat,
+    screenName: String?,
+    nonNotchAdjustment: CGFloat = 0
+) -> CGFloat {
+    let adjustment: CGFloat = screenHasPhysicalNotch(screenName) ? 24 : nonNotchAdjustment
+    return max(0, baseWidth + adjustment)
+}
+
 /// Corner radius insets for the Dynamic Island pill shape.
 /// - closed: half the closed notch height for a true capsule look
 /// - opened: generous radius for smooth expanded pill
 let dynamicIslandPillCornerRadiusInsets: (opened: CGFloat, closed: (standard: CGFloat, minimalistic: CGFloat)) = (
-    opened: 24,
+    opened: 57,
     closed: (standard: 16, minimalistic: 16)
 )
 

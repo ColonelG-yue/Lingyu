@@ -233,6 +233,12 @@ struct InlineHUD: View {
             return max(width, minimum)
         }()
 
+        let centerExclusionWidth = closedActivityCenterExclusionWidth(
+            baseWidth: vm.closedNotchSize.width,
+            screenName: vm.screen,
+            nonNotchAdjustment: -20
+        )
+
         return HStack {
             HStack(spacing: 5) {
                 Group {
@@ -328,7 +334,7 @@ struct InlineHUD: View {
             
             Rectangle()
                 .fill(.black)
-                .frame(width: vm.closedNotchSize.width - 20)
+                .frame(width: centerExclusionWidth)
             
             HStack {
                 if (type == .mic) {

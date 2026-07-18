@@ -287,6 +287,12 @@ struct ClipboardWindowItemRow: View {
         .onTapGesture {
             clipboardManager.copyToClipboard(item)
         }
+        .onDrag {
+            clipboardManager.dragItemProvider(for: item)
+        }
+        .help(item.type == .image
+              ? "单击复制图片；拖动可上传到聊天或其他应用"
+              : "单击复制；拖动可放入其他应用")
     }
     
     private func timeAgoString(from date: Date) -> String {

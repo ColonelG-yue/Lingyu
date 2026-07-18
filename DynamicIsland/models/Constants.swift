@@ -843,6 +843,7 @@ extension Defaults.Keys {
     static let minimumHoverDuration = Key<TimeInterval>("minimumHoverDuration", default: 0.3)
     static let enableHaptics = Key<Bool>("enableHaptics", default: true)
     static let openNotchOnHover = Key<Bool>("openNotchOnHover", default: true)
+	static let keepNotchExpanded = Key<Bool>("keepNotchExpanded", default: false)
 	static let extendHoverArea = Key<Bool>("extendHoverArea", default: false)
     static let externalDisplayStyle = Key<ExternalDisplayStyle>(
         "externalDisplayStyle",
@@ -1048,6 +1049,7 @@ extension Defaults.Keys {
         // MARK: Shelf
     static let dynamicShelf = Key<Bool>("dynamicShelf", default: true)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
+        static let autoAddNewDownloadsToShelf = Key<Bool>("autoAddNewDownloadsToShelf", default: true)
         static let quickShareProvider = Key<String>("quickShareProvider", default: "AirDrop")
         static let localSendSelectedDeviceID = Key<String>("localSendSelectedDeviceID", default: "")
         static let localSendDevicePickerGlassMode = Key<LockScreenGlassCustomizationMode>("localSendDevicePickerGlassMode", default: .standard)
@@ -1090,9 +1092,9 @@ extension Defaults.Keys {
     // MARK: Stats Feature
     static let enableStatsFeature = Key<Bool>("enableStatsFeature", default: false)
     static let enableLLMUsageFeature = Key<Bool>("enableLLMUsageFeature", default: false)
-    static let enableClaudeProvider = Key<Bool>("enableClaudeProvider", default: true)
+    static let enableClaudeProvider = Key<Bool>("enableClaudeProvider", default: false)
     static let enableCodexProvider = Key<Bool>("enableCodexProvider", default: true)
-    static let enableCursorProvider = Key<Bool>("enableCursorProvider", default: true)
+    static let enableCursorProvider = Key<Bool>("enableCursorProvider", default: false)
     static let autoStartStatsMonitoring = Key<Bool>("autoStartStatsMonitoring", default: true)
     static let statsStopWhenNotchCloses = Key<Bool>("statsStopWhenNotchCloses", default: true)
     static let statsUpdateInterval = Key<Double>("statsUpdateInterval", default: 1.0)

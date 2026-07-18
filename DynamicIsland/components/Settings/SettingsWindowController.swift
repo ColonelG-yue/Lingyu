@@ -54,7 +54,7 @@ class SettingsWindowController: NSWindowController {
     private func setupWindow() {
         guard let window = window else { return }
         
-        window.title = "Atoll Settings"
+        window.title = "灵屿 Lingyu 设置"
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
         window.toolbarStyle = .unified
@@ -111,6 +111,10 @@ class SettingsWindowController: NSWindowController {
         DispatchQueue.main.async { [weak self] in
             self?.window?.makeKeyAndOrderFront(nil)
         }
+    }
+
+    func minimizeWindow() {
+        window?.miniaturize(nil)
     }
     
     override func close() {

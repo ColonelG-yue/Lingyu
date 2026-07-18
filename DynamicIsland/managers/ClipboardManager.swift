@@ -260,6 +260,51 @@ class ClipboardManager: ObservableObject {
             }
         }
     }
+
+    /// Creates a drag item that other macOS apps can consume. Images are
+    /// advertised as real PNG files so chat upload fields accept them just
+    /// like an image dragged from Finder.
+    func dragItemProvider(for item: ClipboardItem) -> NSItemProvider {
+        switch item.type {
+        case .image:
+            if let fileName = item.imageFileName {
+                let fileURL = Self.clipboardDataDirectory.appendingPathComponent(fileName)
+                if let provider = NSItemProvider(contentsOf: fileURL) {
+                    provider.suggestedName = "Atoll Clipboard Image.png"
+                    return provider
+                }
+            }
+
+            if let imageData = item.getImageData() {
+                let provider = NSItemProvider(
+                    item: imageData as NSData,
+                    typeIdentifier: UTType.png.identifier
+                )
+                provider.suggestedName = "Atoll Clipboard Image.png"
+                return provider
+            }
+
+        case .file:
+            if let firstURLString = item.fileURLs?.first,
+               let fileURL = URL(string: firstURLString),
+               let provider = NSItemProvider(contentsOf: fileURL) {
+                return provider
+            }
+
+        case .rtf:
+            if let rtfData = item.rtfData {
+                return NSItemProvider(
+                    item: rtfData as NSData,
+                    typeIdentifier: UTType.rtf.identifier
+                )
+            }
+
+        case .text, .url, .unknown:
+            break
+        }
+
+        return NSItemProvider(object: (item.stringData ?? item.preview) as NSString)
+    }
     
     func deleteItem(_ item: ClipboardItem) {
         // Clean up associated files

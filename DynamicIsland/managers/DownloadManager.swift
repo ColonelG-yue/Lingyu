@@ -20,6 +20,7 @@ import Foundation
 import SwiftUI
 import Observation
 import Defaults
+import Combine
 
 @Observable
 @MainActor
@@ -31,6 +32,7 @@ class DownloadManager {
     
     private let coordinator = DynamicIslandViewCoordinator.shared
     private var source: DispatchSourceFileSystemObject?
+    private var cancellables = Set<AnyCancellable>()
     private let queue = DispatchQueue(label: "com.dynamicisland.downloads.monitor", qos: .utility)
     private var completionTimer: Timer?
     private var hasPerformedInitialScan: Bool = false
@@ -53,10 +55,20 @@ class DownloadManager {
                     self.startMonitoringIfNeeded()
                 }
             }
+            .store(in: &cancellables)
+
+        Defaults.publisher(.autoAddNewDownloadsToShelf)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.startMonitoringIfNeeded()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     private func startMonitoringIfNeeded() {
-        if Defaults[.enableDownloadListener] {
+        if Defaults[.enableDownloadListener] || Defaults[.autoAddNewDownloadsToShelf] {
             startMonitoring()
         } else {
             stopMonitoring()
@@ -155,6 +167,18 @@ class DownloadManager {
         
         initialCrDownloadFiles = crDownloadFiles
         previousAllFiles = allFiles
+
+        if Defaults[.autoAddNewDownloadsToShelf], !newRegularFiles.isEmpty {
+            addNewFilesToShelf(named: newRegularFiles)
+        }
+
+        // Shelf inbox monitoring can remain enabled even when the download HUD is disabled.
+        guard Defaults[.enableDownloadListener] else {
+            if isDownloading {
+                updateDownloadingState(isActive: false)
+            }
+            return
+        }
         
         let activeFiles = crDownloadFiles.subtracting(ignoredFiles)
         let hasActiveDownloads = !activeFiles.isEmpty
@@ -185,6 +209,36 @@ class DownloadManager {
             
         } else if hasActiveDownloads {
             updateDownloadingState(isActive: true)
+        }
+    }
+
+    /// Adds references to files that appeared after Atoll started. The originals stay in
+    /// Downloads; removing an item from Shelf never removes the original file.
+    private func addNewFilesToShelf(named fileNames: Set<String>) {
+        guard let downloadsDirectory else { return }
+
+        let candidateURLs = fileNames
+            .map { downloadsDirectory.appendingPathComponent($0) }
+            .filter { url in
+                let ext = url.pathExtension.lowercased()
+                return !["crdownload", "download", "part", "tmp"].contains(ext)
+                    && !url.lastPathComponent.hasPrefix(".")
+            }
+
+        guard !candidateURLs.isEmpty else { return }
+
+        // AirDrop and browsers may rename the destination once more at completion.
+        // A short delay avoids bookmarking an intermediate path.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+
+            let items: [ShelfItem] = candidateURLs.compactMap { url in
+                guard FileManager.default.fileExists(atPath: url.path),
+                      let bookmark = try? Bookmark(url: url) else { return nil }
+                return ShelfItem(kind: .file(bookmark: bookmark.data), isTemporary: false)
+            }
+
+            ShelfStateViewModel.shared.add(items)
         }
     }
     

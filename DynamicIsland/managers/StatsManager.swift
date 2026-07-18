@@ -511,11 +511,11 @@ class StatsManager: ObservableObject {
     }
     
     // MARK: - Smart Monitoring
-    func updateMonitoringState(notchIsOpen: Bool, currentView: String) {
+    func updateMonitoringState(notchIsOpen: Bool, currentView: String, force: Bool = false) {
         let notchState = notchIsOpen ? "open" : "closed"
         
         // Only react to actual state changes
-        guard notchState != lastNotchState || currentView != lastCurrentView else { return }
+        guard force || notchState != lastNotchState || currentView != lastCurrentView else { return }
         
         lastNotchState = notchState
         lastCurrentView = currentView
@@ -525,7 +525,7 @@ class StatsManager: ObservableObject {
         delayedStopTimer?.invalidate()
         
         // Determine if we should be monitoring
-        shouldMonitorForStats = notchIsOpen && (currentView == "stats")
+        shouldMonitorForStats = notchIsOpen && currentView == "stats"
         
         if shouldMonitorForStats {
             // Start monitoring after 3.5 seconds (when notch is open and stats tab is active)
@@ -546,7 +546,7 @@ class StatsManager: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Public Monitoring Controls
     func startMonitoring() {
         guard !isMonitoring else { return }

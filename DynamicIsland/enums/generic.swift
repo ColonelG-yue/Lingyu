@@ -70,8 +70,19 @@ public enum NotchState {
     case open
 }
 
+enum ClosedLiveActivityPreference {
+    case automatic
+    case music
+    case download
+    case timer
+    case shelf
+}
+
 public enum NotchViews {
     case home
+    case productivity
+    case media
+    case appFinder
     case shelf
     case timer
     case stats

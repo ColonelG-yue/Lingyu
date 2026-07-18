@@ -20,6 +20,7 @@ import AVFoundation
 import Combine
 import Defaults
 import KeyboardShortcuts
+import QuartzCore
 import Sparkle
 import SwiftUI
 import SkyLightWindow
@@ -49,7 +50,7 @@ struct DynamicNotchApp: App {
             }
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
-            Button("Restart Atoll") {
+            Button("重启灵屿 Lingyu") {
                 guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
 
                 let workspace = NSWorkspace.shared
@@ -491,7 +492,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Use a consistent height for different view types
         if coordinator.currentView == .timer {
-            baseSize.height = 250 // Extra space for timer presets
+            baseSize.height = max(baseSize.height, 250)
+        } else if coordinator.currentView == .appFinder {
+            baseSize.width = max(baseSize.width, appFinderNotchWidth)
+            baseSize.height = appFinderNotchHeight
         } else if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
             let preferredHeight = coordinator.notesLayoutState.preferredHeight
             baseSize.height = max(baseSize.height, preferredHeight)
@@ -561,7 +565,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let newY = (screenFrame.origin.y + screenFrame.height - clampedHeight).rounded()
         let targetFrame = NSRect(x: newX, y: newY, width: clampedWidth, height: clampedHeight)
 
-        window.setFrame(targetFrame, display: true)
+        guard window.frame != targetFrame else { return }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.26
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(targetFrame, display: true)
+            }
+        } else {
+            window.setFrame(targetFrame, display: true)
+        }
     }
 
     private func shouldAnimateResize(for newSize: CGSize) -> Bool {

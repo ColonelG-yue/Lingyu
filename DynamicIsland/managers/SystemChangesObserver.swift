@@ -92,15 +92,15 @@ final class SystemChangesObserver: MediaKeyInterceptorDelegate {
         }
 
         mediaKeyInterceptor.delegate = self
-        let tapStarted = mediaKeyInterceptor.start()
-        if !tapStarted {
-            NSLog("⚠️ Media key interception unavailable; system HUD will remain visible")
-        }
         mediaKeyInterceptor.configuration = MediaKeyConfiguration(
             interceptVolume: volumeEnabled,
             interceptBrightness: brightnessEnabled,
             interceptCommandModifiedBrightness: keyboardBacklightEnabled
         )
+        let tapStarted = mediaKeyInterceptor.start()
+        if !tapStarted {
+            NSLog("⚠️ Media key interception unavailable; system HUD will remain visible")
+        }
     }
 
     func update(volumeEnabled: Bool, brightnessEnabled: Bool, keyboardBacklightEnabled: Bool) {
