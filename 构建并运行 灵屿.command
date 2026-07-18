@@ -6,10 +6,8 @@ ROOT_DIR="${0:A:h}"
 DERIVED_DIR="$ROOT_DIR/.build/DerivedData"
 BUILT_APP="$DERIVED_DIR/Build/Products/Debug/Lingyu.app"
 INSTALL_DIR="$HOME/Applications"
-# Keep the already-authorized development bundle path stable. Finder and
-# System Settings use CFBundleDisplayName ("灵屿 Lingyu"), while preserving
-# this path avoids creating another duplicate app/TCC permission entry.
-INSTALLED_APP="$INSTALL_DIR/Atoll Dev.app"
+INSTALLED_APP="$INSTALL_DIR/Lingyu.app"
+LEGACY_INSTALLED_APP="$INSTALL_DIR/Atoll Dev.app"
 
 echo "正在编译灵屿 Lingyu…"
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -26,12 +24,13 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 echo "正在安装到 $INSTALLED_APP…"
 mkdir -p "$INSTALL_DIR"
 pkill -f "$INSTALLED_APP/Contents/MacOS/Lingyu" 2>/dev/null || true
-pkill -f "$INSTALLED_APP/Contents/MacOS/Atoll" 2>/dev/null || true
+pkill -f "$LEGACY_INSTALLED_APP/Contents/MacOS/Lingyu" 2>/dev/null || true
+pkill -f "$LEGACY_INSTALLED_APP/Contents/MacOS/Atoll" 2>/dev/null || true
 # `ditto` merges bundles and leaves renamed executables behind. A mirrored
 # install removes stale files, otherwise macOS can relaunch the old Atoll
 # binary even though Info.plist already points at Lingyu.
 /usr/bin/rsync -a --delete "$BUILT_APP/" "$INSTALLED_APP/"
 
-echo "正在启动灵屿 Lingyu Dev…"
+echo "正在启动灵屿 Lingyu…"
 open "$INSTALLED_APP"
-echo "完成。以后可直接打开灵屿 Lingyu Dev；本脚本不注册全局快捷键。"
+echo "完成。以后可直接打开 $INSTALLED_APP；本脚本不注册全局快捷键。"

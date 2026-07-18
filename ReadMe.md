@@ -30,7 +30,7 @@
 3. 等待 Swift Package 依赖解析完成。
 4. 选择 `DynamicIsland` Scheme 和 `My Mac`，按 `Command + R`。
 
-也可以双击仓库根目录的 `构建并运行 灵屿.command`。脚本会编译 Debug 版本、完整同步到 `~/Applications/Atoll Dev.app` 并启动。安装路径暂时保持不变，以尽量保留 macOS 已授予的辅助功能权限；Finder 中显示名为“灵屿 Lingyu”。
+也可以双击仓库根目录的 `构建并运行 灵屿.command`。脚本会编译 Debug 版本、完整同步到 `~/Applications/Lingyu.app` 并启动。首次切换到这个统一名称后，macOS 可能会要求重新授予一次辅助功能权限。
 
 ## 顶部导航使用方法
 
