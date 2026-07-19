@@ -424,23 +424,35 @@ struct NotchStatsView: View {
     private var statsToolbar: some View {
         HStack(spacing: 7) {
             Menu {
-                Toggle(isOn: $showCpuGraph) {
-                    Label("CPU", systemImage: "cpu")
-                }
-                Toggle(isOn: $showMemoryGraph) {
-                    Label("内存", systemImage: "memorychip")
-                }
-                Toggle(isOn: $showGpuGraph) {
-                    Label("GPU", systemImage: "display")
-                }
-                Toggle(isOn: $showNetworkGraph) {
-                    Label("网络", systemImage: "network")
-                }
-                Toggle(isOn: $showDiskGraph) {
-                    Label("磁盘", systemImage: "internaldrive")
+                Section("选择显示的指标") {
+                    Toggle(isOn: $showCpuGraph) {
+                        Label("CPU", systemImage: "cpu")
+                    }
+                    Toggle(isOn: $showMemoryGraph) {
+                        Label("内存", systemImage: "memorychip")
+                    }
+                    Toggle(isOn: $showGpuGraph) {
+                        Label("GPU", systemImage: "display")
+                    }
+                    Toggle(isOn: $showNetworkGraph) {
+                        Label("网络", systemImage: "network")
+                    }
+                    Toggle(isOn: $showDiskGraph) {
+                        Label("磁盘", systemImage: "internaldrive")
+                    }
                 }
 
                 Divider()
+
+                Button("全部显示") {
+                    withAnimation(.smooth) {
+                        showCpuGraph = true
+                        showMemoryGraph = true
+                        showGpuGraph = true
+                        showNetworkGraph = true
+                        showDiskGraph = true
+                    }
+                }
 
                 Button("恢复默认布局") {
                     withAnimation(.smooth) {
@@ -452,7 +464,7 @@ struct NotchStatsView: View {
                     }
                 }
             } label: {
-                toolbarIcon("slider.horizontal.3")
+                statsToolbarLabel
             }
             .menuStyle(.borderlessButton)
             .help("选择显示的系统指标")
@@ -460,13 +472,18 @@ struct NotchStatsView: View {
         }
     }
 
-    private func toolbarIcon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.82))
-            .frame(width: 30, height: 30)
-            .background(.black.opacity(0.65), in: Circle())
-            .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+    private var statsToolbarLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12, weight: .semibold))
+            Text("指标 \(availableGraphs.count)/5")
+                .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(.black.opacity(0.68), in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
     }
 
     private func updateStatsPopoverState() {
