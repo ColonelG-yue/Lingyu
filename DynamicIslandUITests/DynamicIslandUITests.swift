@@ -33,13 +33,16 @@ final class DynamicIslandUITests: XCTestCase {
 
     // The notch panel is present and exposed to accessibility.
     func testNotchExpansion() throws {
-        let notch = app.images["AtollNotch"].firstMatch
+        // AtollNotch is attached to the SwiftUI layout container, not an image.
+        // Querying through the generic accessibility tree keeps this test valid
+        // when SwiftUI exposes the container as a group or hosting element.
+        let notch = app.descendants(matching: .any)["AtollNotch"].firstMatch
         XCTAssertTrue(notch.waitForExistence(timeout: 15.0), "The Atoll notch should be visible.")
     }
 
     // Core custom tabs remain reachable and the quick page exposes real actions.
     func testPrimaryTabsAndQuickActions() throws {
-        let notch = app.images["AtollNotch"].firstMatch
+        let notch = app.descendants(matching: .any)["AtollNotch"].firstMatch
         XCTAssertTrue(notch.waitForExistence(timeout: 15.0))
 
         let quickTab = app.descendants(matching: .any)["Atoll.Tab.快捷"]
