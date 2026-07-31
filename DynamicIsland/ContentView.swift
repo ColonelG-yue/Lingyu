@@ -214,8 +214,6 @@ struct ContentView: View {
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var lastHapticTime: Date = Date()
-    @State private var hoverClickMonitor: Any?
-    @State private var hoverClickLocalMonitor: Any?
     @State private var stickyTerminalClickMonitor: Any?
     @State private var hiddenEdgeHoverPollingTask: Task<Void, Never>?
     @State private var isHoveringClosedMusicWaveformControl: Bool = false
@@ -1997,7 +1995,6 @@ struct ContentView: View {
     /// `.onDisappear` and from `vm.onViewTeardown` on window close. Idempotent.
     private func performViewTeardown() {
         hoverTask?.cancel()
-        stopHoverClickMonitor()
         removeStickyTerminalClickMonitor()
         stopHiddenEdgeHoverPolling()
         cancelMusicControlWindowSync()
@@ -2030,52 +2027,6 @@ struct ContentView: View {
     private func stopHiddenEdgeHoverPolling() {
         hiddenEdgeHoverPollingTask?.cancel()
         hiddenEdgeHoverPollingTask = nil
-    }
-
-    private func startHoverClickMonitor() {
-        guard Defaults[.openNotchOnHover] else { return }
-        guard hoverClickMonitor == nil else { return }
-
-        let handleClick: @Sendable () -> Void = { [weak vm, weak lockScreenManager] in
-            Task { @MainActor in
-                guard let vm, let lockScreenManager else { return }
-                guard !lockScreenManager.isLocked else { return }
-                guard vm.notchState == .closed else { return }
-                guard !self.coordinator.isHoverOpenSuppressed else { return }
-                guard self.isHovering else { return }
-                guard !self.handleClosedMusicWaveformTapIfNeeded() else { return }
-                if Defaults[.enableHaptics] {
-                    self.triggerHapticIfAllowed()
-                }
-                self.openNotch()
-            }
-        }
-
-        // Global monitor catches clicks outside the app window (e.g. when
-        // the cursor is at the very top screen edge and the click goes to
-        // the system rather than our panel).
-        hoverClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { _ in
-            handleClick()
-        }
-
-        // Local monitor catches clicks that DO hit our window — at the
-        // screen edge SwiftUI's .onTapGesture may not fire reliably, but
-        // the NSEvent local monitor will.
-        hoverClickLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
-            handleClick()
-            return event
-        }
-    }
-
-    private func stopHoverClickMonitor() {
-        if let hoverClickMonitor {
-            NSEvent.removeMonitor(hoverClickMonitor)
-            self.hoverClickMonitor = nil
-        }
-        if let hoverClickLocalMonitor {
-            NSEvent.removeMonitor(hoverClickLocalMonitor)
-            self.hoverClickLocalMonitor = nil
-        }
     }
 
     /// Installs the global outside-click monitor whenever the Terminal tab is open
@@ -2125,10 +2076,8 @@ struct ContentView: View {
         hoverTask?.cancel()
 
         if hovering {
-            startHoverClickMonitor()
             removeStickyTerminalClickMonitor()
         } else {
-            stopHoverClickMonitor()
             if isHoveringClosedMusicWaveformControl {
                 withAnimation(.smooth(duration: 0.16)) {
                     isHoveringClosedMusicWaveformControl = false

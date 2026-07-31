@@ -53,43 +53,10 @@ extension View {
         threshold: CGFloat = 4,
         action: @escaping (PanGestureValue) -> Void
     ) -> some View {
-        gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    guard let direction = PanDirection.dominant(
-                        deltaX: value.translation.width,
-                        deltaY: value.translation.height
-                    ) else { return }
-                    let distance = direction.isHorizontal
-                        ? abs(value.translation.width)
-                        : abs(value.translation.height)
-                    guard distance >= threshold else { return }
-                    action(.init(
-                        direction: direction,
-                        translation: distance,
-                        velocity: 0,
-                        phase: .changed,
-                        isDiscreteSwipe: false
-                    ))
-                }
-                .onEnded { value in
-                    guard let direction = PanDirection.dominant(
-                        deltaX: value.translation.width,
-                        deltaY: value.translation.height
-                    ) else { return }
-                    let distance = direction.isHorizontal
-                        ? abs(value.translation.width)
-                        : abs(value.translation.height)
-                    action(.init(
-                        direction: direction,
-                        translation: distance,
-                        velocity: 0,
-                        phase: .ended,
-                        isDiscreteSwipe: false
-                    ))
-                }
-        )
-        .background(UnifiedScrollMonitor(threshold: threshold, action: action))
+        // Use one AppKit event pipeline. Keeping a second SwiftUI
+        // DragGesture here makes terminal scrolling and tab switching race
+        // over the same trackpad movement.
+        self.background(UnifiedScrollMonitor(threshold: threshold, action: action))
     }
 }
 

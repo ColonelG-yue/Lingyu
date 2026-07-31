@@ -394,21 +394,9 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         resetScrollGestureSuppression()
         resetAutoCloseSuppression()
 
-        // Preserve the page the user actually closed. Shelf's legacy
-        // "open by default" behavior is only a fallback when page memory is
-        // disabled; otherwise it overwrites `lastNotchViewIdentifier` on every
-        // close and makes the notch appear stuck on Shelf.
-        if wasShowingAppFinder {
-            // APP Finder is temporary. Its previous page was restored above.
-        } else if !coordinator.openLastTabByDefault {
-            if !ShelfStateViewModel.shared.isEmpty
-                && Defaults[.openShelfByDefault]
-                && !Defaults[.enableMinimalisticUI] {
-                coordinator.currentView = .shelf
-            } else {
-                coordinator.currentView = .home
-            }
-        }
+        // Preserve the page the user actually closed. The next open restores
+        // this page through DynamicIslandViewCoordinator.restoreLastViewIfNeeded().
+        // Do not reset to Home or Shelf here: that discards the user's context.
     }
 
     func closeForLockScreen() {
