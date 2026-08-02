@@ -28,4 +28,24 @@ enum AppRuntimeEnvironment {
         return false
         #endif
     }()
+
+    /// Allows the dedicated persistence regression test to exercise the same
+    /// restore path used by production launches. Other UI tests remain isolated
+    /// from previously persisted navigation state.
+    static let restoresPageMemoryDuringUITesting: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--uitesting-page-memory")
+        #else
+        return false
+        #endif
+    }()
+
+    /// Resets only the UI-test app's page memory before a persistence test.
+    static let resetsPageMemoryDuringUITesting: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--reset-page-memory")
+        #else
+        return false
+        #endif
+    }()
 }

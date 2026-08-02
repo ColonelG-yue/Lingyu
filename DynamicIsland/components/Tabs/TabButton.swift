@@ -48,7 +48,14 @@ struct TabButton: View {
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityIdentifier("Atoll.Tab.\(label)")
+        // Keep the original identifier for unselected tabs so existing UI
+        // tests and automation can find them, and expose a stable selected
+        // state after a page switch without relying on accessibilityValue.
+        .accessibilityIdentifier(
+            selected ? "Atoll.Tab.\(label).selected" : "Atoll.Tab.\(label)"
+        )
+        .accessibilityValue(selected ? "selected" : "not selected")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

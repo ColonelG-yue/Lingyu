@@ -6,16 +6,24 @@ final class DynamicIslandUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = XCUIApplication()
-        app.launchArguments = [
+        app = makeApplication()
+        app.launch()
+    }
+
+    private func makeApplication(extraArguments: [String] = []) -> XCUIApplication {
+        let application = XCUIApplication()
+        application.launchArguments = [
             "--uitesting",
             "-firstLaunch", "NO",
             "-enableMinimalisticUI", "NO",
             "-showCalendar", "YES",
             "-showStandardMediaControls", "YES",
-            "-autoHideInactiveNotchMediaPlayer", "NO"
-        ]
-        app.launch()
+            "-autoHideInactiveNotchMediaPlayer", "NO",
+            "-enableStatsFeature", "YES",
+            "-showCpuGraph", "YES",
+            "-lingyu.topTabOrder.v1", ""
+        ] + extraArguments
+        return application
     }
 
     override func tearDownWithError() throws {
@@ -63,6 +71,36 @@ final class DynamicIslandUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)["Atoll.QuickAction.清空剪贴板"].exists,
             "Clipboard history must not be destructively cleared from Quick Controls."
+        )
+    }
+
+    // A normal page remains selected after the app process is restarted.
+    func testLastPageRestoresAcrossRelaunch() throws {
+        app.terminate()
+        app = makeApplication(extraArguments: [
+            "--uitesting-page-memory",
+            "--reset-page-memory"
+        ])
+        app.launch()
+
+        let quickTab = app.descendants(matching: .any)["Atoll.Tab.快捷"].firstMatch
+        XCTAssertTrue(quickTab.waitForExistence(timeout: 10.0))
+        XCTAssertTrue(quickTab.isHittable)
+        quickTab.click()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Atoll.Tab.快捷.selected"]
+                .waitForExistence(timeout: 5.0),
+            "The quick-controls page should be visible after selecting its tab."
+        )
+
+        app.terminate()
+        app = makeApplication(extraArguments: ["--uitesting-page-memory"])
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Atoll.Tab.快捷.selected"]
+                .waitForExistence(timeout: 10.0),
+            "Lingyu should restore the last ordinary page after relaunch."
         )
     }
 }

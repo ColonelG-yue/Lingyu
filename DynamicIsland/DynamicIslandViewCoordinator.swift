@@ -104,7 +104,11 @@ class DynamicIslandViewCoordinator: ObservableObject {
     static let shared = DynamicIslandViewCoordinator()
     private var cancellables = Set<AnyCancellable>()
     private var hoverOpenSuppressedUntil: Date = .distantPast
-    @AppStorage("atoll.lastNotchView") private var lastNotchViewIdentifier = "home"
+    /// Persist the user's last ordinary page under the Lingyu namespace.
+    /// The legacy Atoll key is read once below so existing installations keep
+    /// their context after the app rename.
+    @AppStorage("lingyu.lastNotchView") private var lastNotchViewIdentifier = "home"
+    @AppStorage("atoll.lastNotchView") private var legacyLastNotchViewIdentifier = ""
     @Published private(set) var viewBeforeAppFinder: NotchViews = .home
     
     private static let tabOrder: [NotchViews] = [.home, .productivity, .media, .appFinder, .shelf, .timer, .stats, .llmUsage, .colorPicker, .notes, .clipboard, .terminal, .extensionExperience]
@@ -142,6 +146,13 @@ class DynamicIslandViewCoordinator: ObservableObject {
     /// Prevents the global page-swipe recognizer from stealing horizontal
     /// scrolling while the pointer is over the top tab strip.
     @Published var isTabStripInteractionActive = false
+
+    private func migrateLegacyPageMemoryIfNeeded() {
+        guard lastNotchViewIdentifier == "home",
+              !legacyLastNotchViewIdentifier.isEmpty,
+              legacyLastNotchViewIdentifier != "appFinder" else { return }
+        lastNotchViewIdentifier = legacyLastNotchViewIdentifier
+    }
     
     
     @AppStorage("firstLaunch") var firstLaunch: Bool = true
@@ -206,6 +217,14 @@ class DynamicIslandViewCoordinator: ObservableObject {
     private let extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
     
     private init() {
+        if AppRuntimeEnvironment.isUITesting,
+           AppRuntimeEnvironment.resetsPageMemoryDuringUITesting {
+            lastNotchViewIdentifier = "home"
+            legacyLastNotchViewIdentifier = ""
+        } else {
+            migrateLegacyPageMemoryIfNeeded()
+        }
+
         selectedScreen = preferredScreen
         Defaults.publisher(.timerDisplayMode)
             .receive(on: DispatchQueue.main)
@@ -523,7 +542,9 @@ class DynamicIslandViewCoordinator: ObservableObject {
     /// Restores the last selected page when the notch is opened again.
     /// This is intentionally done at open time so the closed notch can remain lightweight.
     func restoreLastViewIfNeeded() {
-        guard openLastTabByDefault, !AppRuntimeEnvironment.isUITesting else { return }
+        let canRestoreInCurrentEnvironment = !AppRuntimeEnvironment.isUITesting
+            || AppRuntimeEnvironment.restoresPageMemoryDuringUITesting
+        guard openLastTabByDefault, canRestoreInCurrentEnvironment else { return }
         // Older builds persisted APP Finder. It is now a temporary page, so
         // migrate that stale value to Home once instead of reopening APP.
         if lastNotchViewIdentifier == "appFinder" {
