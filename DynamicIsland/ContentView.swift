@@ -897,6 +897,20 @@ struct ContentView: View {
                       }()
                       let musicPairingEligible = closedMusicPairingEligible(hasActiveMusicSnapshot: hasActiveMusicSnapshot)
                       let musicSecondary = resolveMusicSecondaryLiveActivity(isMusicPairingEligible: musicPairingEligible)
+                      let timerActivityIsActive = timerManager.isTimerActive && coordinator.timerLiveActivityEnabled
+                      let downloadActivityIsActive = downloadManager.isDownloading && Defaults[.enableDownloadListener]
+                      let shelfActivityIsActive = !shelfState.isEmpty && !enableMinimalisticUI && !lockScreenManager.isLocked
+                      let activeCandidates: [ClosedLiveActivityPreference?] = [
+                          musicPairingEligible ? .music : nil,
+                          timerActivityIsActive ? .timer : nil,
+                          downloadActivityIsActive ? .download : nil,
+                          shelfActivityIsActive ? .shelf : nil
+                      ]
+                      let activeClosedLiveActivities = Set(activeCandidates.compactMap { $0 })
+                      let resolvedClosedLiveActivity = ClosedLiveActivityPreference.resolve(
+                          active: activeClosedLiveActivities,
+                          mostRecent: coordinator.preferredClosedLiveActivity
+                      )
                       let extensionSecondaryPayloadID = extensionSecondaryPayloadID(for: musicSecondary)
                       let extensionStandalonePayload = resolvedExtensionStandalonePayload(excluding: extensionSecondaryPayloadID)
                       let activeSneakPeekStyle = resolvedSneakPeekStyle()
@@ -952,7 +966,7 @@ struct ContentView: View {
                       } else if vm.notchState == .closed && capsLockManager.isCapsLockActive && Defaults[.enableCapsLockIndicator] && !vm.hideOnClosed && !lockScreenManager.isLocked {
                           InlineHUD(type: .constant(.capsLock), value: .constant(1.0), icon: .constant(""), hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(AnyTransition.move(edge: .trailing).combined(with: .opacity))
-                      } else if coordinator.preferredClosedLiveActivity == .timer
+                      } else if resolvedClosedLiveActivity == .timer
                                     && (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .timer)
                                     && vm.notchState == .closed
                                     && timerManager.isTimerActive
@@ -960,7 +974,7 @@ struct ContentView: View {
                                     && !vm.hideOnClosed {
                           TimerLiveActivity()
                               .transition(closedLiveActivitySwapTransition)
-                      } else if coordinator.preferredClosedLiveActivity == .download
+                      } else if resolvedClosedLiveActivity == .download
                                     && (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .download)
                                     && vm.notchState == .closed
                                     && downloadManager.isDownloading
@@ -968,7 +982,7 @@ struct ContentView: View {
                                     && !vm.hideOnClosed {
                           DownloadLiveActivity()
                               .transition(closedLiveActivitySwapTransition)
-                      } else if coordinator.preferredClosedLiveActivity == .shelf
+                      } else if resolvedClosedLiveActivity == .shelf
                                     && !isCurrentScreenExpansionVisible
                                     && vm.notchState == .closed
                                     && !shelfState.isEmpty

@@ -70,12 +70,23 @@ public enum NotchState {
     case open
 }
 
-enum ClosedLiveActivityPreference {
+enum ClosedLiveActivityPreference: String, Hashable {
     case automatic
     case music
     case download
     case timer
     case shelf
+
+    /// Fallback order used only when the user has not recently selected an
+    /// active activity. The most recently selected active activity wins first.
+    static let fallbackOrder: [Self] = [.music, .timer, .download, .shelf]
+
+    static func resolve(active: Set<Self>, mostRecent: Self?) -> Self? {
+        if let mostRecent, active.contains(mostRecent) {
+            return mostRecent
+        }
+        return fallbackOrder.first(where: active.contains)
+    }
 }
 
 public enum NotchViews {

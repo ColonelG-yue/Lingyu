@@ -143,6 +143,9 @@ private struct UnifiedScrollMonitor: NSViewRepresentable {
         /// that value is a pixel distance; the caller can commit immediately.
         private func handleDiscreteSwipe(_ event: NSEvent) {
             guard let direction = PanDirection.dominant(deltaX: event.deltaX, deltaY: event.deltaY) else { return }
+            if AppRuntimeEnvironment.gestureDiagnosticsEnabled {
+                Logger.log("Gesture swipe: \(direction)", category: .debug)
+            }
             action(.init(
                 direction: direction,
                 translation: 0,
@@ -225,6 +228,12 @@ private struct UnifiedScrollMonitor: NSViewRepresentable {
             guard let direction = lockedDirection else {
                 reset()
                 return
+            }
+            if AppRuntimeEnvironment.gestureDiagnosticsEnabled {
+                Logger.log(
+                    "Gesture scroll: \(direction), translation=\(Int(accumulated)), velocity=\(Int(currentVelocity(at: timestamp)))",
+                    category: .debug
+                )
             }
             action(.init(
                 direction: direction,

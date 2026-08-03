@@ -48,4 +48,15 @@ enum AppRuntimeEnvironment {
         return false
         #endif
     }()
+
+    /// Enables lightweight trackpad diagnostics without changing production
+    /// behavior. Useful when checking terminal vertical scrolling versus tab
+    /// switching on a real device.
+    static let gestureDiagnosticsEnabled: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--lingyu-gesture-diagnostics")
+        #else
+        return false
+        #endif
+    }()
 }
