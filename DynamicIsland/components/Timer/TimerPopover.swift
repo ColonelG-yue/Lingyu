@@ -21,6 +21,7 @@ import Defaults
 
 struct TimerPopover: View {
     @ObservedObject var timerManager = TimerManager.shared
+    private let coordinator = DynamicIslandViewCoordinator.shared
     @Default(.timerPresets) private var timerPresets
     @Default(.timerShowsCountdown) private var showsCountdown
     @Default(.timerShowsProgress) private var showsProgress
@@ -101,6 +102,7 @@ struct TimerPopover: View {
         guard duration > 0 else { return }
         withAnimation(.smooth) {
             timerManager.startTimer(duration: duration, name: String(localized: "Custom Timer"))
+            coordinator.noteLiveActivityInteraction(for: .timer)
         }
         dismiss()
     }
@@ -108,6 +110,7 @@ struct TimerPopover: View {
     private func startPreset(_ preset: TimerPreset) {
         withAnimation(.smooth) {
             timerManager.startTimer(duration: preset.duration, name: preset.name, preset: preset)
+            coordinator.noteLiveActivityInteraction(for: .timer)
         }
         dismiss()
     }

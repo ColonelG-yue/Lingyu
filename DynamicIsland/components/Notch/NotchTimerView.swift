@@ -120,6 +120,7 @@ struct NotchTimerView: View {
                         ForEach(timerPresets) { preset in
                             TimerPresetCard(preset: preset, isActive: timerManager.activePresetId == preset.id) {
                                 timerManager.startTimer(duration: preset.duration, name: preset.name, preset: preset)
+                                coordinator.noteLiveActivityInteraction(for: .timer)
                                 if !enableMinimalisticUI {
                                     coordinator.currentView = .timer
                                 }
@@ -519,6 +520,7 @@ struct NotchTimerView: View {
     private func startCustomTimer() {
         withAnimation(.smooth) {
             timerManager.startTimer(duration: customDurationInSeconds, name: String(localized: "Custom Timer"))
+            coordinator.noteLiveActivityInteraction(for: .timer)
             if !enableMinimalisticUI {
                 coordinator.currentView = .timer
             }

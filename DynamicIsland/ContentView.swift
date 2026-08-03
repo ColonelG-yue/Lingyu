@@ -1916,6 +1916,7 @@ struct ContentView: View {
                 .onDrop(of: [.data], isTargeted: $vm.dragDetectorTargeting) { _ in true }
                 .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
                     if isTargeted, vm.notchState == .closed {
+                        coordinator.noteLiveActivityInteraction(for: .shelf)
                         coordinator.currentView = .shelf
                         openNotch()
                     } else if !isTargeted {
@@ -2113,6 +2114,7 @@ struct ContentView: View {
 
                     if shouldFocusTimerTab {
                         withAnimation(.smooth) {
+                            self.coordinator.noteLiveActivityInteraction(for: .timer)
                             self.coordinator.currentView = .timer
                         }
                     }

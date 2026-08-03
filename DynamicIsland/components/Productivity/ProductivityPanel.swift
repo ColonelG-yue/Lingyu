@@ -222,6 +222,7 @@ struct ProductivityPanelView: View {
     private func startFocusTimer() {
         Defaults[.enableTimerFeature] = true
         timerManager.startTimer(duration: 25 * 60, name: "番茄钟 · 25 分钟")
+        coordinator.noteLiveActivityInteraction(for: .timer)
         statusMessage = "已开始 25 分钟番茄钟"
     }
 
