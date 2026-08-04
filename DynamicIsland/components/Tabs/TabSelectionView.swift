@@ -66,7 +66,11 @@ struct TabSelectionView: View {
     @AppStorage("lingyu.topTabOrder.v1") private var storedTabOrder = ""
     @State private var isReordering = false
     @State private var draggedTabID: String?
+    @State private var didMoveTab = false
+    @State private var isHoveringTabStrip = false
     @State private var tabStripSuppressionToken = UUID()
+    @State private var reorderAutoCloseToken = UUID()
+    @State private var reorderFailsafeTask: Task<Void, Never>?
     @Namespace var animation
     
     private var availableTabs: [TabModel] {
@@ -165,10 +169,9 @@ struct TabSelectionView: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: coordinator.currentView)
-        .animation(.smooth(duration: 0.2), value: isReordering)
         .onHover { hovering in
-            coordinator.isTabStripInteractionActive = hovering
-            vm.setScrollGestureSuppression(hovering, token: tabStripSuppressionToken)
+            isHoveringTabStrip = hovering
+            updateTabStripInteractionState()
         }
         .onAppear {
             ensureValidSelection(with: tabs)
@@ -179,6 +182,12 @@ struct TabSelectionView: View {
             coordinator.updateAvailableTabViews(tabs.map(\.view))
         }
         .onDisappear {
+            reorderFailsafeTask?.cancel()
+            reorderFailsafeTask = nil
+            vm.setAutoCloseSuppression(false, token: reorderAutoCloseToken)
+            isHoveringTabStrip = false
+            isReordering = false
+            draggedTabID = nil
             coordinator.isTabStripInteractionActive = false
             vm.setScrollGestureSuppression(false, token: tabStripSuppressionToken)
         }
@@ -202,15 +211,8 @@ struct TabSelectionView: View {
         }
         .frame(width: 36, height: 34)
         .foregroundStyle(selected ? activeAccent : .gray)
-        .scaleEffect(isReordering ? 0.94 : 1)
-        .overlay(alignment: .topTrailing) {
-            if isReordering {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
-                    .offset(x: 1, y: -1)
-            }
-        }
+        .scaleEffect(draggedTabID == tab.id ? 0.96 : 1)
+        .animation(.easeOut(duration: 0.14), value: draggedTabID == tab.id)
         .background {
             if selected {
                 Capsule()
@@ -224,21 +226,15 @@ struct TabSelectionView: View {
                     .hidden()
             }
         }
-        .onLongPressGesture(minimumDuration: 0.45) {
-            guard !isReordering else { return }
-            isReordering = true
-            if Defaults[.enableHaptics] {
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-            }
-        }
-
-        if isReordering {
-            button.onDrag {
-                draggedTabID = tab.id
-                return NSItemProvider(object: tab.id as NSString)
-            }
-        } else {
-            button
+        button.onDrag {
+            beginReordering(tab.id)
+            return NSItemProvider(object: tab.id as NSString)
+        } preview: {
+            Image(systemName: tab.icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(activeAccent)
+                .frame(width: 34, height: 34)
+                .background(.black.opacity(0.88), in: Circle())
         }
     }
 
@@ -263,15 +259,45 @@ struct TabSelectionView: View {
             )
             persistTabOrder(ids)
         }
+        didMoveTab = true
+    }
+
+    private func beginReordering(_ tabID: String) {
+        reorderFailsafeTask?.cancel()
+        draggedTabID = tabID
+        didMoveTab = false
+        isReordering = true
+        vm.setAutoCloseSuppression(true, token: reorderAutoCloseToken)
+        updateTabStripInteractionState()
+
+        // A drag cancelled outside the tab strip may not deliver performDrop.
+        // Release the lock eventually so the notch can never remain pinned.
+        reorderFailsafeTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            finishReordering()
+        }
     }
 
     private func finishReordering() {
         guard isReordering || draggedTabID != nil else { return }
+        let shouldConfirmMove = didMoveTab
+        reorderFailsafeTask?.cancel()
+        reorderFailsafeTask = nil
         draggedTabID = nil
+        didMoveTab = false
         isReordering = false
-        if Defaults[.enableHaptics] {
+        vm.setAutoCloseSuppression(false, token: reorderAutoCloseToken)
+        updateTabStripInteractionState()
+        if shouldConfirmMove && Defaults[.enableHaptics] {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         }
+    }
+
+    private func updateTabStripInteractionState() {
+        let active = isHoveringTabStrip || isReordering
+        coordinator.isTabStripInteractionActive = active
+        vm.setScrollGestureSuppression(active, token: tabStripSuppressionToken)
     }
 
     private func persistTabOrder(_ ids: [String]) {

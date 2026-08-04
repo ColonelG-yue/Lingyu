@@ -459,8 +459,6 @@ struct NotchClipboardList: View {
     @ObservedObject var clipboardManager = ClipboardManager.shared
     @State private var hoveredItemId: UUID?
     @State private var justCopiedId: UUID?
-    @State private var suppressionToken = UUID()
-    @State private var isSuppressing = false
     @State private var showClearHistoryAlert = false
     @State private var autoCloseToken = UUID()
     
@@ -550,12 +548,6 @@ struct NotchClipboardList: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .onHover { hovering in
-            updateSuppression(for: hovering)
-        }
-        .onDisappear {
-            updateSuppression(for: false)
-        }
         .alert("Clear Clipboard History?", isPresented: $showClearHistoryAlert) {
             Button("Clear History", role: .destructive) {
                 clipboardManager.clearHistory()
@@ -572,12 +564,6 @@ struct NotchClipboardList: View {
                 clipboardManager.startMonitoring()
             }
         }
-    }
-
-    private func updateSuppression(for hovering: Bool) {
-        guard hovering != isSuppressing else { return }
-        isSuppressing = hovering
-        vm.setScrollGestureSuppression(hovering, token: suppressionToken)
     }
 }
 
