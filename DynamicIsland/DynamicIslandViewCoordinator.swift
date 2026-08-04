@@ -229,6 +229,10 @@ class DynamicIslandViewCoordinator: ObservableObject {
             runActivityPriorityFixture()
         }
 
+        if AppRuntimeEnvironment.runsGesturePolicyFixture {
+            runGesturePolicyFixture()
+        }
+
         selectedScreen = preferredScreen
         Defaults.publisher(.timerDisplayMode)
             .receive(on: DispatchQueue.main)
@@ -325,6 +329,49 @@ class DynamicIslandViewCoordinator: ObservableObject {
         )
         precondition(
             ClosedLiveActivityPreference.resolve(active: [], mostRecent: .music) == nil
+        )
+    }
+
+    /// Covers the routing boundary that cannot be linked directly from the
+    /// macOS UI-test bundle. A vertical terminal scroll must not commit a tab
+    /// switch, while a deliberate horizontal flick should still feel quick.
+    private func runGesturePolicyFixture() {
+        let sensitivity: CGFloat = 200
+        let verticalScroll = PanGestureValue(
+            direction: .up,
+            translation: 180,
+            velocity: 1_600,
+            phase: .ended,
+            isDiscreteSwipe: false
+        )
+        let deliberateHorizontalFlick = PanGestureValue(
+            direction: .left,
+            translation: 36,
+            velocity: 1_200,
+            phase: .changed,
+            isDiscreteSwipe: false
+        )
+        let slowShortDrag = PanGestureValue(
+            direction: .left,
+            translation: 36,
+            velocity: 250,
+            phase: .changed,
+            isDiscreteSwipe: false
+        )
+
+        precondition(PanDirection.dominant(deltaX: -12, deltaY: 1) == .left)
+        precondition(PanDirection.dominant(deltaX: 1, deltaY: 12) == .down)
+        precondition(
+            !PanGesturePolicy.shouldCommitTabSwitch(verticalScroll, sensitivity: sensitivity)
+        )
+        precondition(
+            PanGesturePolicy.shouldCommitTabSwitch(
+                deliberateHorizontalFlick,
+                sensitivity: sensitivity
+            )
+        )
+        precondition(
+            !PanGesturePolicy.shouldCommitTabSwitch(slowShortDrag, sensitivity: sensitivity)
         )
     }
 

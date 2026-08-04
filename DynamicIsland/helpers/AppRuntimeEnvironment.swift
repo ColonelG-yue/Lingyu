@@ -67,4 +67,12 @@ enum AppRuntimeEnvironment {
         return false
         #endif
     }()
+
+    static let runsGesturePolicyFixture: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--uitesting-gesture-policy")
+        #else
+        return false
+        #endif
+    }()
 }

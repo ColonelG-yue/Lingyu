@@ -115,4 +115,16 @@ final class DynamicIslandUITests: XCTestCase {
             "The production priority fixture should complete without an assertion failure."
         )
     }
+
+    func testGestureRoutingPolicyFixture() throws {
+        app.terminate()
+        app = makeApplication(extraArguments: ["--uitesting-gesture-policy"])
+        app.launch()
+
+        XCTAssertTrue(
+            app.wait(for: .runningForeground, timeout: 10.0)
+                || app.wait(for: .runningBackground, timeout: 10.0),
+            "The production gesture policy fixture should complete without an assertion failure."
+        )
+    }
 }

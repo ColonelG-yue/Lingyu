@@ -45,6 +45,37 @@ struct PanGestureValue {
     let isDiscreteSwipe: Bool
 }
 
+/// Pure commit rules shared by the notch, tab strip, and media gestures.
+/// Keeping these rules free of SwiftUI state makes accidental cross-page
+/// changes much easier to test and prevents terminal scrolling from becoming
+/// a tab switch merely because a velocity sample was large.
+enum PanGesturePolicy {
+    static func shouldCommitOpening(
+        _ value: PanGestureValue,
+        sensitivity: CGFloat,
+        velocityThreshold: CGFloat = 650
+    ) -> Bool {
+        value.isDiscreteSwipe
+            || value.translation >= sensitivity
+            || value.velocity >= velocityThreshold
+    }
+
+    static func tabSwitchDistance(sensitivity: CGFloat) -> CGFloat {
+        min(max(sensitivity * 0.42, 72), 120)
+    }
+
+    static func shouldCommitTabSwitch(
+        _ value: PanGestureValue,
+        sensitivity: CGFloat,
+        velocityThreshold: CGFloat = 1_150
+    ) -> Bool {
+        guard value.direction.isHorizontal else { return false }
+        return value.isDiscreteSwipe
+            || value.translation >= tabSwitchDistance(sensitivity: sensitivity)
+            || (value.translation >= 30 && value.velocity >= velocityThreshold)
+    }
+}
+
 extension View {
     /// Installs one gesture pipeline for every pan direction. Keeping this as
     /// one modifier is important: three separate NSEvent monitors race each

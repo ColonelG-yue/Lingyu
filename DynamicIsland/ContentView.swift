@@ -2335,16 +2335,17 @@ struct ContentView: View {
     }
 
     private func shouldCommitPan(_ value: PanGestureValue) -> Bool {
-        value.isDiscreteSwipe
-            || value.translation >= Defaults[.gestureSensitivity]
-            || value.velocity >= 650
+        PanGesturePolicy.shouldCommitOpening(
+            value,
+            sensitivity: Defaults[.gestureSensitivity]
+        )
     }
 
     private func shouldCommitTabSwitch(_ value: PanGestureValue) -> Bool {
-        let distanceThreshold = min(max(Defaults[.gestureSensitivity] * 0.42, 72), 120)
-        return value.isDiscreteSwipe
-            || value.translation >= distanceThreshold
-            || (value.translation >= 30 && value.velocity >= 1_150)
+        PanGesturePolicy.shouldCommitTabSwitch(
+            value,
+            sensitivity: Defaults[.gestureSensitivity]
+        )
     }
 
     /// Horizontal trackpad gestures keep media skip behavior when appropriate;
