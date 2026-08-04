@@ -225,6 +225,10 @@ class DynamicIslandViewCoordinator: ObservableObject {
             migrateLegacyPageMemoryIfNeeded()
         }
 
+        if AppRuntimeEnvironment.runsActivityPriorityFixture {
+            runActivityPriorityFixture()
+        }
+
         selectedScreen = preferredScreen
         Defaults.publisher(.timerDisplayMode)
             .receive(on: DispatchQueue.main)
@@ -300,6 +304,28 @@ class DynamicIslandViewCoordinator: ObservableObject {
 
         // Enforce minimum width on launch for existing configurations
         enforceMinimumNotchWidth()
+    }
+
+    /// Runs against the same resolver used by the compact live-activity view.
+    /// This is intentionally launch-argument driven because the macOS UI test
+    /// target cannot link symbols from the application executable directly.
+    private func runActivityPriorityFixture() {
+        let allActivities: Set<ClosedLiveActivityPreference> = [.music, .download, .timer, .shelf]
+        precondition(
+            ClosedLiveActivityPreference.resolve(active: allActivities, mostRecent: .shelf) == .shelf
+        )
+        precondition(
+            ClosedLiveActivityPreference.resolve(
+                active: [.music, .download, .timer],
+                mostRecent: .shelf
+            ) == .music
+        )
+        precondition(
+            ClosedLiveActivityPreference.resolve(active: [.download, .shelf], mostRecent: .timer) == .download
+        )
+        precondition(
+            ClosedLiveActivityPreference.resolve(active: [], mostRecent: .music) == nil
+        )
     }
 
     var isHoverOpenSuppressed: Bool {

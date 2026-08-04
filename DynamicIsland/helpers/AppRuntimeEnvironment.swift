@@ -59,4 +59,12 @@ enum AppRuntimeEnvironment {
         return false
         #endif
     }()
+
+    static let runsActivityPriorityFixture: Bool = {
+        #if DEBUG
+        return CommandLine.arguments.contains("--uitesting-activity-priority")
+        #else
+        return false
+        #endif
+    }()
 }

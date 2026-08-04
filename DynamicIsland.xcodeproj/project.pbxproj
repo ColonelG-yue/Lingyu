@@ -412,7 +412,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.atoll.DynamicIslandUITests;
 				PRODUCT_MODULE_NAME = DynamicIslandUITests;
 				PRODUCT_NAME = DynamicIslandUITests;
@@ -439,7 +439,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.atoll.DynamicIslandUITests;
 				PRODUCT_MODULE_NAME = DynamicIslandUITests;
 				PRODUCT_NAME = DynamicIslandUITests;

@@ -103,4 +103,16 @@ final class DynamicIslandUITests: XCTestCase {
             "Lingyu should restore the last ordinary page after relaunch."
         )
     }
+
+    func testClosedLiveActivityPriorityResolver() throws {
+        app.terminate()
+        app = makeApplication(extraArguments: ["--uitesting-activity-priority"])
+        app.launch()
+
+        XCTAssertTrue(
+            app.wait(for: .runningForeground, timeout: 10.0)
+                || app.wait(for: .runningBackground, timeout: 10.0),
+            "The production priority fixture should complete without an assertion failure."
+        )
+    }
 }
