@@ -130,11 +130,40 @@ struct ShelfView: View {
                         .foregroundStyle(.white, .gray)
                         .imageScale(.large)
                     
-                    Text("Drop files here")
+                    Text("把文件放到这里")
                         .foregroundStyle(.gray)
                         .font(.system(.title3, design: .rounded))
                         .fontWeight(.medium)
+
+                    Text("AirDrop 或下载后的文件可以暂存在这里，随后直接拖到对话框。")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.46))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        Button("选择文件") {
+                            chooseFilesForShelf()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+
+                        Button("打开下载") {
+                            openDownloadsFolder()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        if !NSDocumentController.shared.recentDocumentURLs.isEmpty {
+                            Button("最近文件") {
+                                loadRecentFilesIntoShelf()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: spacing) {
@@ -153,6 +182,42 @@ struct ShelfView: View {
         }
         .onAppear {
             ShelfStateViewModel.shared.cleanupInvalidItems()
+        }
+    }
+
+    private func chooseFilesForShelf() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = "暂存到 Shelf"
+
+        panel.begin { response in
+            guard response == .OK else { return }
+            let urls = panel.urls
+            Task { @MainActor in
+                let items = await ShelfDropService.items(from: urls)
+                guard !items.isEmpty else { return }
+                ShelfStateViewModel.shared.add(items)
+                DynamicIslandViewCoordinator.shared.noteLiveActivityInteraction(for: .shelf)
+            }
+        }
+    }
+
+    private func openDownloadsFolder() {
+        let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        if let downloadsURL {
+            NSWorkspace.shared.open(downloadsURL)
+        }
+    }
+
+    private func loadRecentFilesIntoShelf() {
+        let urls = Array(NSDocumentController.shared.recentDocumentURLs.prefix(8))
+        Task { @MainActor in
+            let items = await ShelfDropService.items(from: urls)
+            guard !items.isEmpty else { return }
+            ShelfStateViewModel.shared.add(items)
+            DynamicIslandViewCoordinator.shared.noteLiveActivityInteraction(for: .shelf)
         }
     }
 }
