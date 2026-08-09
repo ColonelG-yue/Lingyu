@@ -156,6 +156,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         installTopMenuItemsIfNeeded()
+        Task { @MainActor [calendarManager] in
+            await calendarManager.refreshAfterApplicationBecomesActive()
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

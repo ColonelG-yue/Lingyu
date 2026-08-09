@@ -55,7 +55,7 @@ class CalendarManager: ObservableObject {
     private let eventFetchLimiter = EventFetchLimiter()
     private var lastLockScreenEventsFetchDate: Date?
     private let lockScreenRefreshInterval: TimeInterval = 15
-    private var lockScreenRefreshTask: Task<Void, Never>?
+    private var calendarRefreshTask: Task<Void, Never>?
 
     var hasCalendarAccess: Bool { isAuthorized(calendarAuthorizationStatus) }
     var hasReminderAccess: Bool { isAuthorized(reminderAuthorizationStatus) }
@@ -63,7 +63,7 @@ class CalendarManager: ObservableObject {
     private init() {
         currentWeekStartDate = CalendarManager.startOfDay(Date())
         setupEventStoreChangedObserver()
-        startLockScreenRefreshLoop()
+        startCalendarRefreshLoop()
         Task {
             await reloadCalendarAndReminderLists()
         }
@@ -74,7 +74,7 @@ class CalendarManager: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
         }
         pendingEventStoreRefreshTask?.cancel()
-        lockScreenRefreshTask?.cancel()
+        calendarRefreshTask?.cancel()
     }
 
     private func setupEventStoreChangedObserver() {
@@ -83,7 +83,9 @@ class CalendarManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleEventStoreChanged()
+            Task { @MainActor [weak self] in
+                self?.handleEventStoreChanged()
+            }
         }
     }
 
@@ -118,7 +120,10 @@ class CalendarManager: ObservableObject {
     private func performEventStoreRefresh() async {
         pendingEventStoreRefreshTask = nil
         await reloadCalendarAndReminderLists()
-        await maybeRefreshEventsAfterReload()
+        // A real EventKit change must bypass the short reload cache. Otherwise
+        // an event added from Calendar or synced from iCloud can leave the
+        // currently visible notch calendar stale until the user changes pages.
+        await updateEvents(force: true)
         await updateLockScreenEvents(force: true)
         nextAllowedEventStoreRefresh = Date().addingTimeInterval(eventStoreChangeThrottle)
         ignoreEventStoreChangesUntil = Date().addingTimeInterval(selfInducedChangeSuppression)
@@ -133,14 +138,25 @@ class CalendarManager: ObservableObject {
         updateSelectedCalendars()
     }
 
+    /// Refreshes authorization and visible data without presenting a system
+    /// permission prompt. Called when Lingyu becomes active so permissions
+    /// changed in System Settings and iCloud calendar updates are reflected.
     @MainActor
-    private func maybeRefreshEventsAfterReload() async {
-        guard hasCalendarAccess else { return }
-        let now = Date()
-        if let lastFetch = lastEventsFetchDate, now.timeIntervalSince(lastFetch) < reloadRefreshInterval {
+    func refreshAfterApplicationBecomesActive() async {
+        calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+        reminderAuthorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
+
+        guard hasCalendarAccess || hasReminderAccess else {
+            events = []
+            lockScreenEvents = []
             return
         }
-        await updateEvents()
+
+        await reloadCalendarAndReminderLists()
+        if hasCalendarAccess || hasReminderAccess {
+            await updateEvents(force: true)
+            await updateLockScreenEvents(force: true)
+        }
     }
 
     private func isAuthorized(_ status: EKAuthorizationStatus) -> Bool {
@@ -344,14 +360,15 @@ class CalendarManager: ObservableObject {
         lastLockScreenEventsFetchDate = Date()
     }
 
-    private func startLockScreenRefreshLoop() {
-        lockScreenRefreshTask?.cancel()
-        lockScreenRefreshTask = Task { [weak self] in
+    private func startCalendarRefreshLoop() {
+        calendarRefreshTask?.cancel()
+        calendarRefreshTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
                 if Task.isCancelled { break }
-                guard self.hasCalendarAccess else { continue }
+                guard self.hasCalendarAccess || self.hasReminderAccess else { continue }
+                await self.updateEvents(force: false)
                 await self.updateLockScreenEvents(force: false)
             }
         }
