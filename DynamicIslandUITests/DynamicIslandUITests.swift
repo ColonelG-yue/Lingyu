@@ -74,6 +74,28 @@ final class DynamicIslandUITests: XCTestCase {
         )
     }
 
+    // Hidden top tabs must disappear from the real navigation, while the
+    // Pomodoro page remains available when it has not been hidden.
+    func testHiddenTopTabConfiguration() throws {
+        app.terminate()
+        app = makeApplication(extraArguments: [
+            "-lingyu.hiddenTopTabs.v1",
+            "[\"system-clipboard-剪贴板\"]"
+        ])
+        app.launch()
+
+        let notch = app.descendants(matching: .any)["AtollNotch"].firstMatch
+        XCTAssertTrue(notch.waitForExistence(timeout: 15.0))
+        XCTAssertFalse(
+            app.descendants(matching: .any)["Atoll.Tab.剪贴板"].exists,
+            "A hidden top tab must not remain in the live navigation strip."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Atoll.Tab.番茄钟"].waitForExistence(timeout: 5.0),
+            "The Pomodoro tab must remain visible unless explicitly hidden."
+        )
+    }
+
     // A normal page remains selected after the app process is restarted.
     func testLastPageRestoresAcrossRelaunch() throws {
         app.terminate()
