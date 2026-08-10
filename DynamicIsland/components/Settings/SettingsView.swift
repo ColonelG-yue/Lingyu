@@ -1189,8 +1189,28 @@ private struct TopTabsSettingsSection: View {
         return Set(ids)
     }
 
+    private var visibleCount: Int {
+        LingyuTopTabOption.builtIn.filter { $0.view == .home || !hiddenIDs.contains($0.id) }.count
+    }
+
     var body: some View {
         Section {
+            HStack(spacing: 12) {
+                Label("已显示 \(visibleCount)/\(LingyuTopTabOption.builtIn.count)", systemImage: "rectangle.3.group")
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button("全部显示") {
+                    saveHiddenIDs([])
+                }
+                .disabled(hiddenIDs.isEmpty)
+
+                Button("恢复默认") {
+                    restoreDefaults()
+                }
+            }
+
             ForEach(Array(orderedOptions.enumerated()), id: \.element.id) { index, option in
                 HStack(spacing: 10) {
                     Image(systemName: option.icon)
@@ -1282,6 +1302,12 @@ private struct TopTabsSettingsSection: View {
         guard let data = try? JSONEncoder().encode(ids.sorted()),
               let value = String(data: data, encoding: .utf8) else { return }
         hiddenTabIDs = value
+    }
+
+    private func restoreDefaults() {
+        orderedIDs = LingyuTopTabOption.builtIn.map(\.id)
+        storedOrder = ""
+        saveHiddenIDs([])
     }
 }
 
