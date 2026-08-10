@@ -65,37 +65,54 @@ func maxAllowedNotchWidth() -> CGFloat {
 /// Counts the number of currently enabled standard notch tabs.
 /// Mirrors the tab-building logic in ``TabSelectionView``.
 func enabledStandardTabCount() -> Int {
-    // Quick actions, App Finder and Codex are always present in normal mode.
-    var count = Defaults[.enableMinimalisticUI] ? 0 : 3
+    // Keep sizing in sync with the user-configurable top-tab visibility.
+    // The tab view reads the same UserDefaults key through @AppStorage.
+    let isHidden: (String) -> Bool = { id in
+        guard let rawValue = UserDefaults.standard.string(forKey: "lingyu.hiddenTopTabs.v1"),
+              let data = rawValue.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return false
+        }
+        return ids.contains(id)
+    }
+
+    // Quick actions, App Finder and Codex are standard pages in normal mode.
+    var count = 0
+    if !Defaults[.enableMinimalisticUI] {
+        if !isHidden("system-productivity-快捷") { count += 1 }
+        if !isHidden("system-appFinder-APP") { count += 1 }
+        if !isHidden("system-llmUsage-Codex") { count += 1 }
+    }
 
     // Home tab
-    if Defaults[.enableMinimalisticUI] || Defaults[.showCalendar] || Defaults[.showMirror] {
+    if !isHidden("system-home-Home") && (Defaults[.enableMinimalisticUI] || Defaults[.showCalendar] || Defaults[.showMirror]) {
         count += 1
     }
 
     // Reserve room for the media tab whenever the feature is enabled. The tab
     // may temporarily auto-hide while idle, but the notch should not resize.
-    if !Defaults[.enableMinimalisticUI] && Defaults[.showStandardMediaControls] {
+    if !Defaults[.enableMinimalisticUI] && Defaults[.showStandardMediaControls] && !isHidden("system-media-媒体") {
         count += 1
     }
 
     // Shelf tab
-    if Defaults[.dynamicShelf] {
+    if Defaults[.dynamicShelf] && !isHidden("system-shelf-Shelf") {
         count += 1
     }
 
     // Timer tab (only in .tab display mode)
-    if Defaults[.enableTimerFeature] && Defaults[.timerDisplayMode] == .tab {
+    if Defaults[.enableTimerFeature] && Defaults[.timerDisplayMode] == .tab && !isHidden("system-timer-番茄钟") {
         count += 1
     }
 
     // Notes / Clipboard tab
-    if Defaults[.enableNotes] || (Defaults[.enableClipboardManager] && Defaults[.clipboardDisplayMode] == .separateTab) {
+    if (!isHidden("system-notes-Notes") && Defaults[.enableNotes])
+        || (!isHidden("system-clipboard-剪贴板") && Defaults[.enableClipboardManager] && Defaults[.clipboardDisplayMode] == .separateTab) {
         count += 1
     }
 
     // Terminal tab
-    if Defaults[.enableTerminalFeature] {
+    if Defaults[.enableTerminalFeature] && !isHidden("system-terminal-Terminal") {
         count += 1
     }
 
