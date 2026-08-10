@@ -47,6 +47,7 @@ private enum SettingsTabGroup: String, CaseIterable, Identifiable {
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case topTabs
     case liveActivities
     case appearance
     case lockScreen
@@ -73,7 +74,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     /// Which sidebar group this tab belongs to.
     var group: SettingsTabGroup {
         switch self {
-        case .general, .appearance:                                          return .core
+        case .general, .topTabs, .appearance:                                return .core
         case .media, .liveActivities, .lockScreen, .devices:                 return .mediaAndDisplay
         case .hudAndOSD, .battery:                                           return .system
         case .timer, .calendar, .notes:                                      return .productivity
@@ -88,6 +89,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "通用"
+        case .topTabs: return "顶部功能"
         case .liveActivities: return "实时活动"
         case .appearance: return "外观"
         case .lockScreen: return "锁屏"
@@ -114,6 +116,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: return "gear"
+        case .topTabs: return "rectangle.3.group"
         case .liveActivities: return "waveform.path.ecg"
         case .appearance: return "paintpalette"
         case .lockScreen: return "lock.laptopcomputer"
@@ -140,6 +143,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general: return .blue
+        case .topTabs: return .blue
         case .liveActivities: return .pink
         case .appearance: return .purple
         case .lockScreen: return .orange
@@ -949,6 +953,10 @@ struct SettingsView: View {
             SettingsForm(tab: .general) {
                 GeneralSettings()
             }
+        case .topTabs:
+            SettingsForm(tab: .topTabs) {
+                TopTabsSettings()
+            }
         case .liveActivities:
             SettingsForm(tab: .liveActivities) {
                 LiveActivitiesSettings()
@@ -1277,6 +1285,15 @@ private struct TopTabsSettingsSection: View {
     }
 }
 
+private struct TopTabsSettings: View {
+    var body: some View {
+        Form {
+            TopTabsSettingsSection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
 struct GeneralSettings: View {
     @State private var screens: [String] = NSScreen.screens.compactMap { $0.localizedName }
     @EnvironmentObject var vm: DynamicIslandViewModel
@@ -1320,8 +1337,6 @@ struct GeneralSettings: View {
                 webcamManager: webcamManager,
                 shelfPermission: shelfPermission
             )
-
-            TopTabsSettingsSection()
 
             Section {
                 Defaults.Toggle(key: .enableMinimalisticUI) {
