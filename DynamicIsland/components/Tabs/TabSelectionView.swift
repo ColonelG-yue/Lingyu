@@ -44,6 +44,29 @@ struct TabModel: Identifiable {
     }
 }
 
+/// The built-in pages that can be managed from Lingyu's settings.
+/// Keep these identifiers stable: they are also used by the persisted tab order.
+struct LingyuTopTabOption: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let icon: String
+    let view: NotchViews
+
+    static let builtIn: [LingyuTopTabOption] = [
+        .init(id: "system-home-Home", label: "主页", icon: "house.fill", view: .home),
+        .init(id: "system-productivity-快捷", label: "快捷控制", icon: "slider.horizontal.3", view: .productivity),
+        .init(id: "system-clipboard-剪贴板", label: "剪贴板", icon: "doc.on.clipboard", view: .clipboard),
+        .init(id: "system-media-媒体", label: "媒体", icon: "play.circle.fill", view: .media),
+        .init(id: "system-appFinder-APP", label: "APP", icon: "app.fill", view: .appFinder),
+        .init(id: "system-llmUsage-Codex", label: "Codex", icon: "sparkles", view: .llmUsage),
+        .init(id: "system-timer-番茄钟", label: "番茄钟", icon: "timer", view: .timer),
+        .init(id: "system-stats-系统", label: "系统监控", icon: "chart.xyaxis.line", view: .stats),
+        .init(id: "system-shelf-Shelf", label: "Shelf", icon: "tray.fill", view: .shelf),
+        .init(id: "system-notes-Notes", label: "临时笔记", icon: "note.text", view: .notes),
+        .init(id: "system-terminal-Terminal", label: "终端", icon: "apple.terminal", view: .terminal)
+    ]
+}
+
 struct TabSelectionView: View {
     @EnvironmentObject private var vm: DynamicIslandViewModel
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
@@ -64,6 +87,7 @@ struct TabSelectionView: View {
     @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
     @Default(.enableMinimalisticUI) private var enableMinimalisticUI
     @AppStorage("lingyu.topTabOrder.v1") private var storedTabOrder = ""
+    @AppStorage("lingyu.hiddenTopTabs.v1") private var hiddenTabIDs = "[]"
     @State private var isReordering = false
     @State private var draggedTabID: String?
     @State private var didMoveTab = false
@@ -124,7 +148,12 @@ struct TabSelectionView: View {
                 )
             }
         }
-        return tabsArray
+        let hiddenIDs = decodedHiddenTabIDs
+        return tabsArray.filter { tab in
+            // Keep Home as the safe fallback page even if an old preference
+            // accidentally contains its identifier.
+            tab.view == .home || !hiddenIDs.contains(tab.id)
+        }
     }
 
     private var tabs: [TabModel] {
@@ -244,6 +273,14 @@ struct TabSelectionView: View {
             return []
         }
         return ids
+    }
+
+    private var decodedHiddenTabIDs: Set<String> {
+        guard let data = hiddenTabIDs.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(ids)
     }
 
     private func moveTab(_ draggedID: String, _ targetID: String) {

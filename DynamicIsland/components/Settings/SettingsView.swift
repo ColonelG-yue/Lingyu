@@ -1163,6 +1163,120 @@ private struct PermissionStatusRow: View {
     }
 }
 
+private struct TopTabsSettingsSection: View {
+    @AppStorage("lingyu.topTabOrder.v1") private var storedOrder = ""
+    @AppStorage("lingyu.hiddenTopTabs.v1") private var hiddenTabIDs = "[]"
+    @State private var orderedIDs = LingyuTopTabOption.builtIn.map(\.id)
+
+    private var orderedOptions: [LingyuTopTabOption] {
+        let optionsByID = Dictionary(uniqueKeysWithValues: LingyuTopTabOption.builtIn.map { ($0.id, $0) })
+        return orderedIDs.compactMap { optionsByID[$0] }
+    }
+
+    private var hiddenIDs: Set<String> {
+        guard let data = hiddenTabIDs.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return Set(ids)
+    }
+
+    var body: some View {
+        Section {
+            ForEach(Array(orderedOptions.enumerated()), id: \.element.id) { index, option in
+                HStack(spacing: 10) {
+                    Image(systemName: option.icon)
+                        .frame(width: 22)
+                        .foregroundStyle(option.view == .timer ? .red : .secondary)
+
+                    Text(option.label)
+                    Spacer()
+
+                    if option.view == .home {
+                        Text("固定")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Toggle("显示", isOn: visibilityBinding(for: option.id))
+                            .labelsHidden()
+                    }
+
+                    Button {
+                        move(optionID: option.id, offset: -1)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(index == 0)
+                    .help("上移")
+
+                    Button {
+                        move(optionID: option.id, offset: 1)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(index == orderedOptions.count - 1)
+                    .help("下移")
+                }
+                .padding(.vertical, 2)
+            }
+
+            Text("顶部图标可以直接拖动调整顺序；隐藏后仍可从对应功能页面进入。番茄钟默认保留，避免被顶部刘海遮住时无法访问。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("灵动岛顶部功能")
+        } footer: {
+            Text("主页始终保留。设置会立即同步到顶部导航，不需要重启灵屿。")
+        }
+        .onAppear {
+            orderedIDs = normalizedOrder()
+        }
+    }
+
+    private func normalizedOrder() -> [String] {
+        let allIDs = LingyuTopTabOption.builtIn.map(\.id)
+        guard let data = storedOrder.data(using: .utf8),
+              let saved = try? JSONDecoder().decode([String].self, from: data) else {
+            return allIDs
+        }
+        let known = saved.filter { allIDs.contains($0) }
+        return known + allIDs.filter { !known.contains($0) }
+    }
+
+    private func visibilityBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { !hiddenIDs.contains(id) },
+            set: { isVisible in
+                var ids = hiddenIDs
+                if isVisible {
+                    ids.remove(id)
+                } else {
+                    ids.insert(id)
+                }
+                saveHiddenIDs(ids)
+            }
+        )
+    }
+
+    private func move(optionID: String, offset: Int) {
+        guard let index = orderedIDs.firstIndex(of: optionID) else { return }
+        let destination = index + offset
+        guard orderedIDs.indices.contains(destination) else { return }
+        orderedIDs.swapAt(index, destination)
+        guard let data = try? JSONEncoder().encode(orderedIDs),
+              let value = String(data: data, encoding: .utf8) else { return }
+        storedOrder = value
+    }
+
+    private func saveHiddenIDs(_ ids: Set<String>) {
+        guard let data = try? JSONEncoder().encode(ids.sorted()),
+              let value = String(data: data, encoding: .utf8) else { return }
+        hiddenTabIDs = value
+    }
+}
+
 struct GeneralSettings: View {
     @State private var screens: [String] = NSScreen.screens.compactMap { $0.localizedName }
     @EnvironmentObject var vm: DynamicIslandViewModel
@@ -1206,6 +1320,8 @@ struct GeneralSettings: View {
                 webcamManager: webcamManager,
                 shelfPermission: shelfPermission
             )
+
+            TopTabsSettingsSection()
 
             Section {
                 Defaults.Toggle(key: .enableMinimalisticUI) {
