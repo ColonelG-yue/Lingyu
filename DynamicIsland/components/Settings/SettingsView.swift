@@ -34,12 +34,12 @@ private enum SettingsTabGroup: String, CaseIterable, Identifiable {
     var title: String? {
         switch self {
         case .core:             return nil
-        case .mediaAndDisplay:  return String(localized: "Media & Display")
-        case .system:           return String(localized: "System")
-        case .productivity:     return String(localized: "Productivity")
-        case .utilities:        return String(localized: "Utilities")
-        case .developer:        return String(localized: "Developer")
-        case .integrations:     return String(localized: "Integrations")
+        case .mediaAndDisplay:  return "媒体与显示"
+        case .system:           return "系统"
+        case .productivity:     return "效率"
+        case .utilities:        return "工具"
+        case .developer:        return "开发"
+        case .integrations:     return "集成"
         case .info:             return nil
         }
     }
@@ -87,27 +87,27 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return String(localized: "General")
-        case .liveActivities: return String(localized: "Live Activities")
-        case .appearance: return String(localized: "Appearance")
-        case .lockScreen: return String(localized: "Lock Screen")
-        case .media: return String(localized: "Media")
-        case .devices: return String(localized: "Devices")
-        case .extensions: return String(localized: "Extensions")
-        case .timer: return String(localized: "Timer")
-        case .calendar: return String(localized: "Calendar")
-        case .hudAndOSD: return String(localized: "Controls")
-        case .battery: return String(localized: "Battery")
-        case .stats: return String(localized: "Stats")
-        case .clipboard: return String(localized: "Clipboard")
-        case .screenAssistant: return String(localized: "Screen Assistant")
-        case .colorPicker: return String(localized: "Color Picker")
-        case .downloads: return String(localized: "Downloads")
-        case .shelf: return String(localized: "Shelf")
-        case .shortcuts: return String(localized: "Shortcuts")
-        case .notes: return String(localized: "Notes")
-        case .terminal: return String(localized: "Terminal")
-        case .about: return String(localized: "About")
+        case .general: return "通用"
+        case .liveActivities: return "实时活动"
+        case .appearance: return "外观"
+        case .lockScreen: return "锁屏"
+        case .media: return "媒体"
+        case .devices: return "设备"
+        case .extensions: return "扩展"
+        case .timer: return "番茄钟"
+        case .calendar: return "日历"
+        case .hudAndOSD: return "控制"
+        case .battery: return "电池"
+        case .stats: return "系统监控"
+        case .clipboard: return "剪贴板"
+        case .screenAssistant: return "屏幕助手"
+        case .colorPicker: return "取色器"
+        case .downloads: return "下载"
+        case .shelf: return "Shelf"
+        case .shortcuts: return "快捷指令"
+        case .notes: return "临时笔记"
+        case .terminal: return "终端"
+        case .about: return "关于"
         }
     }
 
@@ -288,6 +288,7 @@ private struct SettingsForm<Content: View>: View {
                     }
                     highlightCoordinator.consumeScrollRequest(request)
                 }
+                .navigationTitle(tab.title)
         }
     }
 }
@@ -1038,6 +1039,130 @@ struct SettingsView: View {
     }
 }
 
+private struct PermissionStatusSection: View {
+    @ObservedObject var calendarManager: CalendarManager
+    @ObservedObject var accessibilityPermission: AccessibilityPermissionStore
+    @ObservedObject var webcamManager: WebcamManager
+    @ObservedObject var shelfPermission: ShelfFolderAccessPermissionStore
+
+    var body: some View {
+        Section {
+            PermissionStatusRow(
+                icon: "hand.raised.fill",
+                title: "辅助功能",
+                detail: "用于稳定监听手势和系统交互",
+                status: accessibilityPermission.isAuthorized ? "已允许" : "未允许",
+                isAuthorized: accessibilityPermission.isAuthorized
+            ) {
+                accessibilityPermission.openSystemSettings()
+            }
+
+            PermissionStatusRow(
+                icon: "calendar",
+                title: "日历",
+                detail: "用于显示 Mac、iCloud 和其他账户的日程",
+                status: calendarStatus(calendarManager.calendarAuthorizationStatus),
+                isAuthorized: calendarManager.hasCalendarAccess
+            ) {
+                openPrivacySettings(path: "Privacy_Calendars")
+            }
+
+            PermissionStatusRow(
+                icon: "checklist",
+                title: "提醒事项",
+                detail: "用于显示和完成提醒事项",
+                status: calendarStatus(calendarManager.reminderAuthorizationStatus),
+                isAuthorized: calendarManager.hasReminderAccess
+            ) {
+                openPrivacySettings(path: "Privacy_Reminders")
+            }
+
+            PermissionStatusRow(
+                icon: "camera.fill",
+                title: "摄像头",
+                detail: "仅在使用镜子功能时读取摄像头",
+                status: cameraStatus(webcamManager.authorizationStatus),
+                isAuthorized: webcamManager.authorizationStatus == .authorized
+            ) {
+                openPrivacySettings(path: "Privacy_Camera")
+            }
+
+            PermissionStatusRow(
+                icon: "folder.fill",
+                title: "Shelf 文件访问",
+                detail: "用于读取文稿和下载目录中的暂存文件",
+                status: shelfPermission.hasDocumentsAndDownloadsAccess ? "已允许" : "部分允许",
+                isAuthorized: shelfPermission.hasDocumentsAndDownloadsAccess
+            ) {
+                shelfPermission.openSystemSettings()
+            }
+        } header: {
+            Text("权限状态")
+        } footer: {
+            Text("灵屿不会因为打开设置页而自动申请权限。点击某一项右侧按钮后，再到系统设置中确认。")
+        }
+    }
+
+    private func calendarStatus(_ status: EKAuthorizationStatus) -> String {
+        switch status {
+        case .authorized, .fullAccess: return "已允许"
+        case .denied, .restricted: return "已拒绝"
+        case .notDetermined: return "待授权"
+        case .writeOnly: return "仅写入"
+        @unknown default: return "未知"
+        }
+    }
+
+    private func cameraStatus(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "已允许"
+        case .denied, .restricted: return "已拒绝"
+        case .notDetermined: return "待授权"
+        @unknown default: return "未知"
+        }
+    }
+
+    private func openPrivacySettings(path: String) {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(path)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+private struct PermissionStatusRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    let status: String
+    let isAuthorized: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .frame(width: 22)
+                .foregroundStyle(isAuthorized ? .green : .orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(status)
+                .font(.caption)
+                .foregroundStyle(isAuthorized ? .green : .orange)
+
+            Button("打开设置", action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
 struct GeneralSettings: View {
     @State private var screens: [String] = NSScreen.screens.compactMap { $0.localizedName }
     @EnvironmentObject var vm: DynamicIslandViewModel
@@ -1064,6 +1189,10 @@ struct GeneralSettings: View {
     @Default(.reverseScrollGestures) var reverseScrollGestures
     @Default(.externalDisplayStyle) var externalDisplayStyle
     @Default(.hideNonNotchUntilHover) var hideNonNotchUntilHover
+    @ObservedObject private var calendarManager = CalendarManager.shared
+    @ObservedObject private var accessibilityPermission = AccessibilityPermissionStore.shared
+    @ObservedObject private var webcamManager = WebcamManager.shared
+    @ObservedObject private var shelfPermission = ShelfFolderAccessPermissionStore.shared
 
     private func highlightID(_ title: String) -> String {
         SettingsTab.general.highlightID(for: title)
@@ -1071,6 +1200,13 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            PermissionStatusSection(
+                calendarManager: calendarManager,
+                accessibilityPermission: accessibilityPermission,
+                webcamManager: webcamManager,
+                shelfPermission: shelfPermission
+            )
+
             Section {
                 Defaults.Toggle(key: .enableMinimalisticUI) {
                     Text("Enable Minimalistic UI")
@@ -1231,6 +1367,12 @@ struct GeneralSettings: View {
             .controlSize(.small)
         }
         .navigationTitle("General")
+        .onAppear {
+            accessibilityPermission.refreshStatus()
+            shelfPermission.refreshStatus()
+            webcamManager.authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+            Task { await calendarManager.refreshAfterApplicationBecomesActive() }
+        }
         .onChange(of: openNotchOnHover) {
             if !openNotchOnHover {
                 enableGestures = true
