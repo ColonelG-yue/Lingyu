@@ -35,11 +35,11 @@ struct OnboardingFinishView: View {
                 .foregroundColor(.accentColor)
                 .padding()
 
-            Text("You're All Set!")
+            Text("灵屿已经准备好了")
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("You can now enjoy the app. If you want to tweak things further, you can always visit the settings.")
+            Text("你可以直接使用灵屿，也可以随时进入设置中心调整外观、手势、权限和顶部功能。")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -50,12 +50,12 @@ struct OnboardingFinishView: View {
 
             VStack(spacing: 12) {
                 Button(action: onOpenSettings) {
-                    Label("Customize in Settings", systemImage: "gear")
+                    Label("打开设置中心", systemImage: "gear")
                         .controlSize(.large)
                 }
                 .controlSize(.large)
 
-                Button("Finish", action: onFinish)
+                Button("完成", action: onFinish)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
@@ -66,7 +66,7 @@ struct OnboardingFinishView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    Text("Privacy Policy")
+                    Text("隐私政策")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

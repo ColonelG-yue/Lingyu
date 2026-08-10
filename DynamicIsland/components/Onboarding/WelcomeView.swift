@@ -44,7 +44,7 @@ struct WelcomeView: View {
                     Text("灵屿 Lingyu")
                         .font(.system(.largeTitle, design: .default))
                         .fontWeight(.semibold)
-                    Text("Welcome")
+                    Text("首次设置")
                         .font(.title)
                         .foregroundStyle(.secondary)
                         .padding(.bottom, 30)
@@ -68,7 +68,7 @@ struct WelcomeView: View {
                     Button {
                         onGetStarted?()
                     } label: {
-                        Text("Get started")
+                        Text("开始使用")
                             .padding(.horizontal, 20)
                             .padding(.vertical, 6)
                     }
@@ -80,7 +80,7 @@ struct WelcomeView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }) {
-                        Text("Privacy Policy")
+                        Text("隐私政策")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

@@ -56,9 +56,9 @@ struct OnboardingView: View {
             case .cameraPermission:
                 PermissionRequestView(
                     icon: Image(systemName: "camera.fill"),
-                    title: String(localized: "Enable Camera Access"),
-                    description: String(localized: "Atoll includes a mirror feature that lets you quickly check your appearance using your camera, right from the notch. Camera access is required only to show this live preview. You can turn the mirror feature on or off at any time in the app."),
-                    privacyNote: String(localized: "Your camera is never used without your consent, and nothing is recorded or stored."),
+                    title: "允许使用摄像头",
+                    description: "灵屿可以在刘海区域显示镜子预览。只有开启镜子功能时才会使用摄像头，你也可以之后在设置中关闭。",
+                    privacyNote: "未经允许不会使用摄像头，也不会录制或保存画面。",
                     onAllow: {
                         Task {
                             await requestCameraPermission()
@@ -78,9 +78,9 @@ struct OnboardingView: View {
             case .calendarPermission:
                 PermissionRequestView(
                     icon: Image(systemName: "calendar"),
-                    title: String(localized: "Enable Calendar Access"),
-                    description: String(localized: "Atoll can show all your upcoming events in one place. Access to your calendar is needed to display your schedule."),
-                    privacyNote: String(localized: "Your calendar data is only used to show your events and is never shared."),
+                    title: "允许读取日历",
+                    description: "灵屿可以把 Mac 日历中的近期日程显示在刘海里。日历权限只用于读取和展示你的日程。",
+                    privacyNote: "日历数据只保存在本机使用，不会上传或分享。",
                     onAllow: {
                         Task {
                             await requestCalendarPermission()
@@ -129,21 +129,21 @@ struct OnboardingView: View {
             showFocusMonitoringChoice = true
         }
         .confirmationDialog(
-            "Focus detection mode",
+            "专注检测方式",
             isPresented: $showFocusMonitoringChoice,
             titleVisibility: .visible
         ) {
-            Button("Use DevTools") {
+            Button("使用 DevTools") {
                 Defaults[.focusMonitoringMode] = .useDevTools
             }
 
-            Button("Use without DevTools") {
+            Button("不使用 DevTools") {
                 Defaults[.focusMonitoringMode] = .withoutDevTools
             }
 
-            Button("Later", role: .cancel) {}
+            Button("稍后设置", role: .cancel) {}
         } message: {
-            Text("This is optional. You can change it any time from the menu bar.")
+            Text("这是可选功能，之后可以在菜单栏或设置中心中修改。")
         }
     }
 
@@ -157,4 +157,3 @@ struct OnboardingView: View {
         await calendarService.requestAccess()
     }
 }
-

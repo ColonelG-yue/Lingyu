@@ -122,7 +122,7 @@ final class FullDiskAccessPermissionStore: ObservableObject {
 #if os(macOS)
         let alert = NSAlert()
         alert.messageText = "Full Disk Access Required"
-        alert.informativeText = "Dynamic Island needs Full Disk Access to detect custom Focus indicators and power the Shelf. Click Continue to open Full Disk Access settings, then press the + button and select Dynamic Island (we'll reveal it in Finder for you)."
+        alert.informativeText = "灵屿需要访问权限来检测专注状态并使用 Shelf。点击“继续”打开系统设置，然后点击“+”并选择灵屿；如果需要，我会先在 Finder 中显示应用位置。"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")

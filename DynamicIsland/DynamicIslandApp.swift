@@ -1468,7 +1468,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
             window.center()
-            window.title = "Onboarding"
+            window.title = "灵屿 Lingyu 首次设置"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.contentView = NSHostingView(rootView: OnboardingView(
